@@ -118,30 +118,17 @@ class WeReadExporter(object):
                 "markdown.extensions.attr_list",
             ],
         )
-        return '<html><body>%s<div class="page-break"></div></body></html>' % html
-
-    # def markdown_to_html(self, md_path, html_path):
-    #     with open(os.path.join(current_path, "style.css")) as fp:
-    #         style = fp.read()
-    #     with open(md_path) as fp:
-    #         text = fp.read()
-    #     html = markdown.markdown(
-    #         text,
-    #         extensions=[
-    #             "markdown.extensions.fenced_code",
-    #             "markdown.extensions.attr_list",
-    #         ],
-    #     )
-    #     with open(html_path, "w") as fp:
-    #         fp.write("<style>\n%s\n</style>\n%s" % (style, html))
-    #     logging.info("[%s] Html file %s created" % (self.__class__.__name__, html_path))
+        html += '<div class="page-break"></div>'
+        if wrap:
+            html = '<html><head><link rel="stylesheet" href="style.css"></head><body>%s</body></html>' % html
+        return html
 
     async def markdown_to_pdf(self, save_path, dump_html=False):
         meta_data = await self._load_meta_data()
-        raw_html = ""
+        raw_html = '<img src="cover.jpg" style="width: 100%;">\n'
         for index, chapter in enumerate(meta_data["chapters"]):
             chapter_path = self._make_chapter_path(index, chapter["id"])
-            raw_html += self._markdown_to_html(chapter_path)
+            raw_html += self._markdown_to_html(chapter_path, wrap=False)
         raw_html = raw_html.replace("<pre><code>", "<pre><code>\n") # Fix unexpected indent
         if dump_html:
             html_path = os.path.join(self._save_dir, "output.html")
