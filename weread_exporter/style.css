@@ -5,7 +5,7 @@ html {
     --alice-important-color: rgb(162, 42, 42);
     background: var(--alice-bg-color);
     color: var(--alice-font-color);
-    font-size: 16px;
+    font-size: 14px;
     font-family: "Helvetica";
 }
 
@@ -34,7 +34,6 @@ p {
 }
 
 code {
-    background: rgba(235, 235, 235, 0.35);
     color: #48b456;
     padding: 0 5px;
     margin: 0 2px;
@@ -42,6 +41,8 @@ code {
 }
 
 pre {
+    background: rgba(235, 235, 235, 0.35);
+    font-size: 0.8em;
     white-space: pre-wrap;
 }
 
@@ -60,6 +61,7 @@ pre {
 
 img {
     border-radius: 1em;
+    max-width: 100%;
 }
 
 li {
@@ -184,4 +186,9 @@ table>thead:first-child>tr:first-child>td {
 
 table>tbody+tbody {
     border-top: 2px solid var(--alice-font-color);
+}
+
+.page-break  {
+    display:block;
+    page-break-before:always;
 }
