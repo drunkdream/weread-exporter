@@ -28,6 +28,10 @@ class WeReadExporter(object):
         self._meta_data = {}
         self._current_chapter = 0
 
+    async def get_book_title(self):
+        meta_data = await self._load_meta_data()
+        return meta_data["title"]
+
     def _make_chapter_path(self, index, chapter_id):
         return os.path.join(self._chapter_dir, "%d-%s.md" % (index + 1, chapter_id))
 
@@ -120,16 +124,21 @@ class WeReadExporter(object):
         )
         html += '<div class="page-break"></div>'
         if wrap:
-            html = '<html><head><link rel="stylesheet" href="style.css"></head><body>%s</body></html>' % html
+            html = (
+                '<html><head><link rel="stylesheet" href="style.css"></head><body>%s</body></html>'
+                % html
+            )
         return html
 
-    async def markdown_to_pdf(self, save_path, dump_html=False):
+    async def markdown_to_pdf(self, save_path, font_size=None, dump_html=False):
         meta_data = await self._load_meta_data()
         raw_html = '<img src="cover.jpg" style="width: 100%;">\n'
         for index, chapter in enumerate(meta_data["chapters"]):
             chapter_path = self._make_chapter_path(index, chapter["id"])
             raw_html += self._markdown_to_html(chapter_path, wrap=False)
-        raw_html = raw_html.replace("<pre><code>", "<pre><code>\n") # Fix unexpected indent
+        raw_html = raw_html.replace(
+            "<pre><code>", "<pre><code>\n"
+        )  # Fix unexpected indent
         if dump_html:
             html_path = os.path.join(self._save_dir, "output.html")
             with open(html_path, "w") as fp:
@@ -137,7 +146,11 @@ class WeReadExporter(object):
         html = HTML(string=raw_html, base_url=self._save_dir)
         css = []
         css_path = os.path.join(current_path, "style.css")
-        css.append(CSS(filename=css_path))
+        with open(css_path) as fp:
+            raw_css = fp.read()
+            if font_size:
+                raw_css = raw_css.replace("14px", "%dpx" % font_size)
+            css.append(CSS(string=raw_css))
 
         # Generate PDF
         html.write_pdf(save_path, stylesheets=css)
