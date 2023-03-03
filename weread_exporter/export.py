@@ -6,6 +6,7 @@ import os
 import markdown
 
 from ebooklib import epub
+from weasyprint import HTML, CSS
 
 from . import utils
 
@@ -104,7 +105,7 @@ class WeReadExporter(object):
             with open(chapter_path, "w") as fp:
                 fp.write(output)
 
-    def _markdown_to_html(self, path_or_text):
+    def _markdown_to_html(self, path_or_text, wrap=True):
         if os.path.isfile(path_or_text):
             with open(path_or_text) as fp:
                 markdown_text = fp.read()
@@ -117,23 +118,29 @@ class WeReadExporter(object):
                 "markdown.extensions.attr_list",
             ],
         )
-        return "<html><body>%s</body></html>" % html
+        html += '<div class="page-break"></div>'
+        if wrap:
+            html = '<html><head><link rel="stylesheet" href="style.css"></head><body>%s</body></html>' % html
+        return html
 
-    def markdown_to_html(self, md_path, html_path):
-        with open(os.path.join(current_path, "style.css")) as fp:
-            style = fp.read()
-        with open(md_path) as fp:
-            text = fp.read()
-        html = markdown.markdown(
-            text,
-            extensions=[
-                "markdown.extensions.fenced_code",
-                "markdown.extensions.attr_list",
-            ],
-        )
-        with open(html_path, "w") as fp:
-            fp.write("<style>\n%s\n</style>\n%s" % (style, html))
-        logging.info("[%s] Html file %s created" % (self.__class__.__name__, html_path))
+    async def markdown_to_pdf(self, save_path, dump_html=False):
+        meta_data = await self._load_meta_data()
+        raw_html = '<img src="cover.jpg" style="width: 100%;">\n'
+        for index, chapter in enumerate(meta_data["chapters"]):
+            chapter_path = self._make_chapter_path(index, chapter["id"])
+            raw_html += self._markdown_to_html(chapter_path, wrap=False)
+        raw_html = raw_html.replace("<pre><code>", "<pre><code>\n") # Fix unexpected indent
+        if dump_html:
+            html_path = os.path.join(self._save_dir, "output.html")
+            with open(html_path, "w") as fp:
+                fp.write(raw_html)
+        html = HTML(string=raw_html, base_url=self._save_dir)
+        css = []
+        css_path = os.path.join(current_path, "style.css")
+        css.append(CSS(filename=css_path))
+
+        # Generate PDF
+        html.write_pdf(save_path, stylesheets=css)
 
     async def markdown_to_epub(self, save_path):
         meta_data = await self._load_meta_data()

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 
 import aiohttp
 
@@ -10,13 +11,19 @@ async def fetch(url, headers=None, respond_with_headers=False):
             "User-Agent"
         ] = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36"
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
-            response.raise_for_status()
-            result = await response.read()
-            if respond_with_headers:
-                return response.headers, result
-            else:
-                return result
+        for _ in range(3):
+            try:
+                async with session.get(url, headers=headers) as response:
+                    response.raise_for_status()
+                    result = await response.read()
+                    if respond_with_headers:
+                        return response.headers, result
+                    else:
+                        return result
+            except:
+                logging.exception("Fetch url %s failed" % url)
+        else:
+            raise RuntimeError("Fetch url %s failed" % url)
 
 
 def md5(s):
