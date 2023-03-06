@@ -233,6 +233,21 @@ class WeReadWebPage(object):
             inject_script = "<script>\n%s</script>\n" % hook_script
             response = {"body": inject_script.encode() + body}
             await request.respond(response)
+        elif "/app." in request.url and request.url.endswith(".js"):
+            body = await utils.fetch(request.url, headers=request.headers)
+            pos = body.find(b"'isCopyRightForbiddenRead':function")
+            if pos < 0:
+                logging.warning(
+                    "[%s] Lookup isCopyRightForbiddenRead failed"
+                    % self.__class__.__name__
+                )
+                await request.continue_()
+                return
+            pos = body.find(b"{", pos)
+            pos1 = body.find(b"}", pos)
+            body = body[: pos + 1] + b"return false;" + body[pos1:]
+            response = {"body": body}
+            await request.respond(response)
             self._page.remove_listener("request", self.handle_request)
             await self._page.setRequestInterception(False)
         else:
@@ -270,6 +285,7 @@ class WeReadWebPage(object):
                 await self._page.evaluate(
                     r"canvasContextHandler.data.markdown += '\n\n';"
                 )
+                await self.pre_load_page()
                 await self._page.click("button.readerFooter_button")
                 await asyncio.sleep(1)
                 await self._page.waitForSelector("button.readerFooter_button")
