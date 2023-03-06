@@ -33,6 +33,7 @@ class WeReadWebPage(object):
         self._browser = None
         self._page = None
         self._load_cookie()
+        self._url = ""
 
     async def get_book_info(self):
         html = (await utils.fetch(self._home_url)).decode()
@@ -155,6 +156,11 @@ class WeReadWebPage(object):
         await self._page.waitForSelector("div.readerFooter a")
         if self._cookie:
             await self.wait_for_avatar()
+        self._page.on("console", self.handle_log)
+
+    def handle_log(self, message):
+        with open("console.log", "a+") as fp:
+            fp.write("[%s] %s\n" % (self._url, message.text))
 
     async def wait_for_avatar(self, timeout=30):
         time0 = time.time()
@@ -263,8 +269,8 @@ class WeReadWebPage(object):
     async def start_read(self):
         await self.pre_load_page()
         # await self._page.click(".readerFooter a")
-        url = self._chapter_root_url + self._book_id
-        await self._page.goto(url, timeout=60000)
+        self._url = self._chapter_root_url + self._book_id
+        await self._page.goto(self._url, timeout=60000)
         await self._page.waitForSelector("button.readerFooter_button", timeout=60000)
 
     async def get_markdown(self):
@@ -305,7 +311,8 @@ class WeReadWebPage(object):
         logging.info("[%s] Go to chapter %s" % (self.__class__.__name__, chapter_id))
         # await self.clear_cache()
         await self.pre_load_page()
-        await self._page.goto(self._get_chapter_url(chapter_id), timeout=60000)
+        self._url = self._get_chapter_url(chapter_id)
+        await self._page.goto(self._url, timeout=60000)
         await asyncio.sleep(5)
         if check_next_chapter:
             await self._page.waitForSelector("button.readerFooter_button")
