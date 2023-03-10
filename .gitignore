@@ -1,2 +1,5 @@
 cache/
 *.pyc
+*.epub
+*.pdf
+*.md

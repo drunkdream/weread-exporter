@@ -33,6 +33,7 @@ class WeReadWebPage(object):
         self._browser = None
         self._page = None
         self._load_cookie()
+        self._url = ""
 
     async def get_book_info(self):
         html = (await utils.fetch(self._home_url)).decode()
@@ -50,14 +51,17 @@ class WeReadWebPage(object):
         book_info["intro"] = data["reader"]["bookInfo"]["intro"]
         book_info["chapters"] = []
         for chapter in data["reader"]["chapterInfos"]:
-            book_info["chapters"].append(
-                {
-                    "id": chapter["chapterUid"],
-                    "title": chapter["title"],
-                    "level": chapter["level"],
-                    "words": chapter["wordCount"],
-                }
-            )
+            chap = {
+                "id": chapter["chapterUid"],
+                "title": chapter["title"],
+                "level": chapter["level"],
+                "words": chapter["wordCount"],
+                "anchors": [],
+            }
+            if chapter["anchors"]:
+                for it in chapter["anchors"]:
+                    chap["anchors"].append({"title": it["title"], "level": it["level"]})
+            book_info["chapters"].append(chap)
         return book_info
 
     async def get_user_info(self):
@@ -155,6 +159,11 @@ class WeReadWebPage(object):
         await self._page.waitForSelector("div.readerFooter a")
         if self._cookie:
             await self.wait_for_avatar()
+        self._page.on("console", self.handle_log)
+
+    def handle_log(self, message):
+        with open("%s.log" % self._book_id, "a+") as fp:
+            fp.write("[%s] %s\n" % (self._url, message.text))
 
     async def wait_for_avatar(self, timeout=30):
         time0 = time.time()
@@ -231,9 +240,12 @@ class WeReadWebPage(object):
             ) as fp:
                 hook_script = fp.read()
             inject_script = "<script>\n%s</script>\n" % hook_script
+            body = body.replace(b'"soldout":1', b'"soldout":0')
             response = {"body": inject_script.encode() + body}
             await request.respond(response)
         elif "/app." in request.url and request.url.endswith(".js"):
+            self._page.remove_listener("request", self.handle_request)
+            await self._page.setRequestInterception(False)
             body = await utils.fetch(request.url, headers=request.headers)
             pos = body.find(b"'isCopyRightForbiddenRead':function")
             if pos < 0:
@@ -248,8 +260,6 @@ class WeReadWebPage(object):
             body = body[: pos + 1] + b"return false;" + body[pos1:]
             response = {"body": body}
             await request.respond(response)
-            self._page.remove_listener("request", self.handle_request)
-            await self._page.setRequestInterception(False)
         else:
             await request.continue_()
 
@@ -263,8 +273,8 @@ class WeReadWebPage(object):
     async def start_read(self):
         await self.pre_load_page()
         # await self._page.click(".readerFooter a")
-        url = self._chapter_root_url + self._book_id
-        await self._page.goto(url, timeout=60000)
+        self._url = self._chapter_root_url + self._book_id
+        await self._page.goto(self._url, timeout=60000)
         await self._page.waitForSelector("button.readerFooter_button", timeout=60000)
 
     async def get_markdown(self):
@@ -305,7 +315,8 @@ class WeReadWebPage(object):
         logging.info("[%s] Go to chapter %s" % (self.__class__.__name__, chapter_id))
         # await self.clear_cache()
         await self.pre_load_page()
-        await self._page.goto(self._get_chapter_url(chapter_id), timeout=60000)
+        self._url = self._get_chapter_url(chapter_id)
+        await self._page.goto(self._url, timeout=60000)
         await asyncio.sleep(5)
         if check_next_chapter:
             await self._page.waitForSelector("button.readerFooter_button")

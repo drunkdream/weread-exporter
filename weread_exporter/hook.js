@@ -104,7 +104,7 @@ let canvasContextHandler = {
       if (target[name] instanceof Function) {
         return function (...args) {
           if (name == "fillText") {
-            if (args[1] == 0 || true) {
+            if (args[1] == 0) {
               console.log(name, ...args, that.data.lastPos);
             }
             if (args[0].startsWith("abcdefghijklmn")) {
