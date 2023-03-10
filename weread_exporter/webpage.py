@@ -51,14 +51,17 @@ class WeReadWebPage(object):
         book_info["intro"] = data["reader"]["bookInfo"]["intro"]
         book_info["chapters"] = []
         for chapter in data["reader"]["chapterInfos"]:
-            book_info["chapters"].append(
-                {
-                    "id": chapter["chapterUid"],
-                    "title": chapter["title"],
-                    "level": chapter["level"],
-                    "words": chapter["wordCount"],
-                }
-            )
+            chap = {
+                "id": chapter["chapterUid"],
+                "title": chapter["title"],
+                "level": chapter["level"],
+                "words": chapter["wordCount"],
+                "anchors": [],
+            }
+            if chapter["anchors"]:
+                for it in chapter["anchors"]:
+                    chap["anchors"].append({"title": it["title"], "level": it["level"]})
+            book_info["chapters"].append(chap)
         return book_info
 
     async def get_user_info(self):
@@ -237,9 +240,12 @@ class WeReadWebPage(object):
             ) as fp:
                 hook_script = fp.read()
             inject_script = "<script>\n%s</script>\n" % hook_script
+            body = body.replace(b'"soldout":1', b'"soldout":0')
             response = {"body": inject_script.encode() + body}
             await request.respond(response)
         elif "/app." in request.url and request.url.endswith(".js"):
+            self._page.remove_listener("request", self.handle_request)
+            await self._page.setRequestInterception(False)
             body = await utils.fetch(request.url, headers=request.headers)
             pos = body.find(b"'isCopyRightForbiddenRead':function")
             if pos < 0:
@@ -254,8 +260,6 @@ class WeReadWebPage(object):
             body = body[: pos + 1] + b"return false;" + body[pos1:]
             response = {"body": body}
             await request.respond(response)
-            self._page.remove_listener("request", self.handle_request)
-            await self._page.setRequestInterception(False)
         else:
             await request.continue_()
 

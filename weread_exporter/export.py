@@ -180,7 +180,8 @@ class WeReadExporter(object):
         # add CSS file
         book.add_item(default_css)
         chapters = []
-
+        toc = []
+        section = None
         for index, chapter in enumerate(meta_data["chapters"]):
             chapter_path = self._make_chapter_path(index, chapter["id"])
             xhtml_name = "chap_%.4d.xhtml" % (index + 1)
@@ -194,6 +195,30 @@ class WeReadExporter(object):
             book.add_item(chap)
             chapters.append(chap)
 
+            if section:
+                if chapter["level"] > 1:
+                    section[1].append(chap)
+                else:
+                    toc.append(section)
+                    section = None
+
+            if not section:
+                if chapter["anchors"]:
+                    section = (epub.Section(chapter["title"]), [])
+                    for it in chapter["anchors"]:
+                        section[1].append(
+                            epub.Link(xhtml_name, it["title"], str(chapter["id"]))
+                        )
+                elif chapter["level"] > 1:
+                    section = (toc.pop(-1), [])
+                    section[1].append(
+                        epub.Link(xhtml_name, chapter["title"], str(chapter["id"]))
+                    )
+                else:
+                    toc.append(
+                        epub.Link(xhtml_name, chapter["title"], str(chapter["id"]))
+                    )
+
         for it in os.listdir(self._image_dir):
             with open(os.path.join(self._image_dir, it), "rb") as fp:
                 content = fp.read()
@@ -204,7 +229,7 @@ class WeReadExporter(object):
                 )
                 book.add_item(image)
 
-        book.toc = ((epub.Section("目录"), chapters),)
+        book.toc = toc
         # add default NCX and Nav file
         book.add_item(epub.EpubNcx())
         book.add_item(epub.EpubNav())
