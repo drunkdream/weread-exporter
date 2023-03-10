@@ -162,7 +162,7 @@ class WeReadWebPage(object):
         self._page.on("console", self.handle_log)
 
     def handle_log(self, message):
-        with open("console.log", "a+") as fp:
+        with open("%s.log" % self._book_id, "a+") as fp:
             fp.write("[%s] %s\n" % (self._url, message.text))
 
     async def wait_for_avatar(self, timeout=30):
