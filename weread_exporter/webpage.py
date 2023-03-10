@@ -311,13 +311,13 @@ class WeReadWebPage(object):
             utils.wr_hash(str(chapter_id)),
         )
 
-    async def goto_chapter(self, chapter_id, check_next_chapter=True):
+    async def goto_chapter(self, chapter_id, check_next_chapter=True, timeout=60):
         logging.info("[%s] Go to chapter %s" % (self.__class__.__name__, chapter_id))
         # await self.clear_cache()
         await self.pre_load_page()
         self._url = self._get_chapter_url(chapter_id)
-        await self._page.goto(self._url, timeout=60000)
-        await asyncio.sleep(5)
+        await self._page.goto(self._url, timeout=1000 * timeout)
+        await asyncio.sleep(2)
         if check_next_chapter:
             await self._page.waitForSelector("button.readerFooter_button")
             await self.check_login()
