@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 
 import markdown
 
@@ -160,7 +161,7 @@ class WeReadExporter(object):
         book = epub.EpubBook()
         book.set_identifier("id123456")
         book.set_title(meta_data["title"])
-        book.set_language("cn")
+        book.set_language("zh-cn")
         book.add_author(meta_data["author"])
         # add cover image
         with open(self._cover_image_path, "rb") as fp:
@@ -252,6 +253,7 @@ class WeReadExporter(object):
         if not os.path.isfile(self._cover_image_path):
             await self.save_cover_image()
 
+        min_wait_time = 10
         for index, chapter in enumerate(meta_data["chapters"]):
             logging.info(
                 "[%s] Check chapter %s/%s"
@@ -264,9 +266,25 @@ class WeReadExporter(object):
             logging.info(
                 "[%s] File %s not exist" % (self.__class__.__name__, file_path)
             )
-            await self._page.goto_chapter(
-                chapter["id"], check_next_chapter=index < len(meta_data["chapters"]) - 1
-            )
+
+            time0 = 0
+            for _ in range(3):
+                time0 = time.time()
+                try:
+                    await self._page.goto_chapter(
+                        chapter["id"],
+                        check_next_chapter=index < len(meta_data["chapters"]) - 1,
+                        timeout=30,
+                    )
+                except:
+                    logging.exception(
+                        "[%s] Goto chapter %s failed"
+                        % (self.__class__.__name__, chapter["title"])
+                    )
+                else:
+                    break
+            else:
+                raise RuntimeError("Load chapter %s failed" % chapter["title"])
 
             markdown = await self._page.get_markdown()
             logging.info(
@@ -275,4 +293,7 @@ class WeReadExporter(object):
             )
             with open(file_path, "w") as fp:
                 fp.write(markdown)
-            await asyncio.sleep(2)
+
+            wait_time = min_wait_time - (time.time() - time0)
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
