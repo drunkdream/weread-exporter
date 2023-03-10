@@ -239,6 +239,24 @@ class WeReadExporter(object):
         # write to the file
         epub.write_epub(save_path, book, {})
 
+    async def epub_to_mobi(self, epub_path, save_path):
+        kindlegen_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "bin", "kindlegen"
+        )
+        if not os.path.isfile(kindlegen_path):
+            raise RuntimeError("File %s not exist" % kindlegen_path)
+        os.chmod(kindlegen_path, 0o755)
+        cmdline = [
+            kindlegen_path,
+            os.path.abspath(epub_path),
+            "-o",
+            os.path.basename(save_path),
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmdline, cwd=os.path.dirname(save_path)
+        )
+        await proc.wait()
+
     async def save_cover_image(self):
         meta_data = await self._load_meta_data()
         cover_url = meta_data["cover"].replace("/s_", "/t9_")
