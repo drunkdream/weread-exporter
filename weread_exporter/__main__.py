@@ -2,11 +2,12 @@ import argparse
 import asyncio
 import logging
 import os
+import sys
 
 from . import export, webpage
 
 
-async def main():
+async def async_main():
     parser = argparse.ArgumentParser(
         prog="weread-exporter", description="WeRead book export cmdline tool"
     )
@@ -18,6 +19,9 @@ async def main():
         action="append",
         choices=["md", "epub", "pdf", "mobi"],
     )
+    parser.add_argument(
+        "--force-login", help="force login first", action="store_true", default=False
+    )
     args = parser.parse_args()
     args.output_format = args.output_format or ["epub"]
     if "mobi" in args.output_format and "epub" not in args.output_format:
@@ -26,7 +30,7 @@ async def main():
     page = webpage.WeReadWebPage(
         args.book_id, cookie_path=os.path.join("cache", "cookie.txt")
     )
-    await page.launch()
+    await page.launch(args.force_login)
     save_path = os.path.join("cache", args.book_id)
     output_dir = "output"
     if not os.path.isdir(output_dir):
@@ -47,15 +51,28 @@ async def main():
             logging.info("Save file %s complete" % save_path)
 
     if "mobi" in args.output_format:
+        if sys.platform != "linux":
+            logging.error("Only linux system supported to export mobi format")
+            return -1
         epub_path = os.path.join(output_dir, "%s.epub" % title)
         save_path = os.path.join(output_dir, "%s.mobi" % title)
         await exporter.epub_to_mobi(epub_path, save_path)
         if not os.path.isfile(save_path):
             raise RuntimeError("Create mobi file failed")
         logging.info("Save file %s complete" % save_path)
+    return 0
+
+
+def main():
+    logging.root.level = logging.INFO
+    handler = logging.StreamHandler()
+    fmt = "[%(asctime)s][%(levelname)s]%(message)s"
+    formatter = logging.Formatter(fmt)
+    handler.setFormatter(formatter)
+    logging.root.addHandler(handler)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(async_main())
 
 
 if __name__ == "__main__":
-    logging.root.level = logging.INFO
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    main()
