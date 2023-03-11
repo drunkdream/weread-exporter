@@ -1,5 +1,8 @@
 cache/
+output/
 *.pyc
 *.epub
 *.pdf
 *.md
+*.log
+*.egg-info/

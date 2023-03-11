@@ -116,7 +116,7 @@ let canvasContextHandler = {
                 that.data.markdown = "## " + title.innerText + "\n\n";
               }
             }
-            if (that.data.fontSizeChanged && that.data.fontSize < 18) {
+            if (that.data.fontSizeChanged && that.data.fontSize <= 18) {
               console.log("add sup tag");
               if (that.data.highlightMode) {
                 that.data.markdown += "`";
@@ -148,7 +148,7 @@ let canvasContextHandler = {
                 that.data.markdown += "\n\n### ";
                 that.data.titleMode = true;
               } else if (that.data.fontSize >= 18) {
-                if (args[2] - that.data.lastPos[1] >= 50 || that.data.lastPos[0] < 750) {
+                if (args[2] - that.data.lastPos[1] >= 55 || that.data.lastPos[0] < 750) {
                   that.ensureHighlightClosed();
                   that.data.markdown += "\n\n";
                   if (that.data.fontColor !== defaultFontColor) {
@@ -199,7 +199,7 @@ let canvasContextHandler = {
       let fontSize = 0;
       for (let it of value.split(" ")) {
         if (it.endsWith("px")) {
-          fontSize = parseFloat(it);
+          fontSize = parseInt(it);
           break;
         }
       }

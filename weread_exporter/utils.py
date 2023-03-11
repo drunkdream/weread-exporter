@@ -4,6 +4,10 @@ import logging
 import aiohttp
 
 
+class LoginRequiredError(RuntimeError):
+    pass
+
+
 async def fetch(url, headers=None, respond_with_headers=False):
     headers = headers or {}
     if "User-Agent" not in headers:

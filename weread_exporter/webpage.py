@@ -1,7 +1,5 @@
 """
-curl 'https://weread.qq.com/web/book/chapterInfos' \
-  -H 'content-type: application/json;charset=UTF-8' \
-  --data-raw '{"bookIds":["34615967"]}' 
+WebRead WebPage
 """
 
 import asyncio
@@ -16,7 +14,7 @@ from . import utils
 
 
 class WeReadWebPage(object):
-    """"""
+    """WebRead WebPage"""
 
     root_url = "https://weread.qq.com"
     window_size = (1920, 1080)
@@ -128,10 +126,17 @@ class WeReadWebPage(object):
             cookies.append("%s=%s" % (key, self._cookie[key]))
         return "; ".join(cookies)
 
-    # async def _update_cookie(self):
-    #     self._cookie = await self._page.cookies()
+    async def _read_cookie(self):
+        cookies = await self._page.cookies()
+        cookie_map = {}
+        for cookie in cookies:
+            cookie_map[cookie["name"]] = cookie["value"]
+        return cookie_map
 
-    async def launch(self):
+    async def _update_cookie(self):
+        self._cookie = await self._read_cookie()
+
+    async def launch(self, force_login=False):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
         self._browser = await pyppeteer.launch(
             headless=False,
@@ -157,6 +162,8 @@ class WeReadWebPage(object):
             await self._inject_cookie()
         await self._page.goto(self._home_url)
         await self._page.waitForSelector("div.readerFooter a")
+        if force_login:
+            await self.check_login()
         if self._cookie:
             await self.wait_for_avatar()
         self._page.on("console", self.handle_log)
@@ -203,16 +210,23 @@ class WeReadWebPage(object):
                 }
             )
 
-    async def check_login(self):
-        selector = "button.readerFooter_button"
-        script = (
-            "document.querySelector('%s') && document.querySelector('%s').innerText"
-            % (selector, selector)
-        )
-        result = await self._page.evaluate(script)
-        if "登录" in result:
+    async def login(self):
+        selectors = [
+            "button.navBar_link_Login",
+            "div.readerTopBar_right button.actionItem",
+        ]
+        for selector in selectors:
+            script = (
+                "var elem = document.querySelector('%s'); elem && elem.innerText"
+                % (selector)
+            )
+            result = await self._page.evaluate(script)
+            if not result:
+                continue
+            if "登录" not in result:
+                continue
             await self._page.click(selector)
-            await self.pre_load_page()
+            script = "document.querySelector('div.menu_container img.wr_avatar_img')"
             time0 = time.time()
             while time.time() - time0 < 300:
                 logging.info("[%s] Waiting for login" % self.__class__.__name__)
@@ -220,13 +234,13 @@ class WeReadWebPage(object):
                 result = await self._page.evaluate(script)
                 if not result:
                     continue
-                if "登录" not in result:
-                    logging.info("[%s] Login success" % self.__class__.__name__)
-                    await self._update_cookie()
-                    self._save_cookie()
-                    return
+                logging.info("[%s] Login success" % self.__class__.__name__)
+                await self._update_cookie()
+                self._save_cookie()
+                return True
             else:
                 raise RuntimeError("Login timeout")
+        return False
 
     async def _handle_request(self, request):
         logging.info("[%s] Fetch url %s" % (self.__class__.__name__, request.url))
@@ -272,7 +286,6 @@ class WeReadWebPage(object):
 
     async def start_read(self):
         await self.pre_load_page()
-        # await self._page.click(".readerFooter a")
         self._url = self._chapter_root_url + self._book_id
         await self._page.goto(self._url, timeout=60000)
         await self._page.waitForSelector("button.readerFooter_button", timeout=60000)
@@ -301,6 +314,8 @@ class WeReadWebPage(object):
                 await self._page.waitForSelector("button.readerFooter_button")
             elif result == "下一章":
                 break
+            elif result.startswith("登录"):
+                raise utils.LoginRequiredError()
             else:
                 raise NotImplementedError(result)
 
@@ -320,8 +335,13 @@ class WeReadWebPage(object):
         await asyncio.sleep(2)
         if check_next_chapter:
             await self._page.waitForSelector("button.readerFooter_button")
-            await self.check_login()
-            await self._check_next_page()
+            try:
+                await self._check_next_page()
+            except utils.LoginRequiredError:
+                await self.login()
+                return await self.goto_chapter(
+                    chapter_id, check_next_chapter=check_next_chapter, timeout=timeout
+                )
 
     async def clear_cache(self):
         await self._page.evaluate("canvasContextHandler.clearCanvasCache();")
