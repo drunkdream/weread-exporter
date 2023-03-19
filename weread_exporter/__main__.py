@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-from . import export, webpage
+from . import export, utils, webpage
 
 
 async def async_main():
@@ -20,6 +20,18 @@ async def async_main():
         choices=["md", "epub", "pdf", "mobi"],
     )
     parser.add_argument(
+        "--load-timeout",
+        help="load chapter page timeout",
+        type=int,
+        default=30,
+    )
+    parser.add_argument(
+        "--load-interval",
+        help="load chapter page interval time",
+        type=int,
+        default=10,
+    )
+    parser.add_argument(
         "--force-login", help="force login first", action="store_true", default=False
     )
     args = parser.parse_args()
@@ -27,39 +39,75 @@ async def async_main():
     if "mobi" in args.output_format and "epub" not in args.output_format:
         args.output_format.append("epub")
 
-    page = webpage.WeReadWebPage(
-        args.book_id, cookie_path=os.path.join("cache", "cookie.txt")
-    )
-    await page.launch(args.force_login)
-    save_path = os.path.join("cache", args.book_id)
-    output_dir = "output"
-    if not os.path.isdir(output_dir):
-        os.mkdir(output_dir)
-    exporter = export.WeReadExporter(page, save_path)
-    await exporter.export_markdown()
-    await exporter.pre_process_markdown()
-    title = await exporter.get_book_title()
-    if "epub" in args.output_format:
-        save_path = os.path.join(output_dir, "%s.epub" % title)
-        await exporter.markdown_to_epub(save_path)
-        logging.info("Save file %s complete" % save_path)
+    if "_" in args.book_id:
+        # book list id
+        book_list = [it["id"] for it in await utils.get_book_list(args.book_id)]
+    else:
+        book_list = [args.book_id]
 
-    if "pdf" in args.output_format:
-        for font_size, desc in ((14, "small"), (32, "large")):
-            save_path = os.path.join(output_dir, "%s-%s.pdf" % (title, desc))
-            await exporter.markdown_to_pdf(save_path, font_size=font_size)
-            logging.info("Save file %s complete" % save_path)
+    for book_id in book_list:
+        logging.info("Exporting book %s" % book_id)
+        page = webpage.WeReadWebPage(
+            book_id, cookie_path=os.path.join("cache", "cookie.txt")
+        )
+        if not await page.check_valid():
+            logging.warning("Book %s status is invalid, stop exporting" % book_id)
+            continue
+        save_path = os.path.join("cache", book_id)
+        output_dir = "output"
+        if not os.path.isdir(output_dir):
+            os.mkdir(output_dir)
+        exporter = export.WeReadExporter(page, save_path)
+        while True:
+            try:
+                await page.launch(args.force_login)
+            except RuntimeError:
+                logging.exception("Launch book %s home page failed" % book_id)
+                continue
 
-    if "mobi" in args.output_format:
-        if sys.platform != "linux":
-            logging.error("Only linux system supported to export mobi format")
-            return -1
-        epub_path = os.path.join(output_dir, "%s.epub" % title)
-        save_path = os.path.join(output_dir, "%s.mobi" % title)
-        await exporter.epub_to_mobi(epub_path, save_path)
-        if not os.path.isfile(save_path):
-            raise RuntimeError("Create mobi file failed")
-        logging.info("Save file %s complete" % save_path)
+            try:
+                await exporter.export_markdown(args.load_timeout, args.load_interval)
+            except utils.LoadChapterFailedError:
+                logging.warning("Load chapter failed, close browser and retry")
+                await page.close()
+            else:
+                await page.close()
+                break
+
+        await exporter.pre_process_markdown()
+        title = await exporter.get_book_title()
+        title = utils.format_filename(title)
+        if "epub" in args.output_format:
+            save_path = os.path.join(output_dir, "%s.epub" % title)
+            if os.path.isfile(save_path):
+                logging.info("File %s exist, ignore export" % save_path)
+            else:
+                await exporter.markdown_to_epub(save_path)
+                logging.info("Save file %s complete" % save_path)
+
+        if "pdf" in args.output_format:
+            for font_size, desc in ((14, "small"), (32, "large")):
+                save_path = os.path.join(output_dir, "%s-%s.pdf" % (title, desc))
+                if os.path.isfile(save_path):
+                    logging.info("File %s exist, ignore export" % save_path)
+                else:
+                    await exporter.markdown_to_pdf(save_path, font_size=font_size)
+                    logging.info("Save file %s complete" % save_path)
+
+        if "mobi" in args.output_format:
+            if sys.platform != "linux":
+                logging.error("Only linux system supported to export mobi format")
+                return -1
+            epub_path = os.path.join(output_dir, "%s.epub" % title)
+            save_path = os.path.join(output_dir, "%s.mobi" % title)
+            if os.path.isfile(save_path):
+                logging.info("File %s exist, ignore export" % save_path)
+            else:
+                await exporter.epub_to_mobi(epub_path, save_path)
+                if not os.path.isfile(save_path):
+                    logging.warning("Create mobi file failed")
+                    continue
+                logging.info("Save file %s complete" % save_path)
     return 0
 
 
