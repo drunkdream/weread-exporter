@@ -136,6 +136,12 @@ class WeReadWebPage(object):
     async def _update_cookie(self):
         self._cookie = await self._read_cookie()
 
+    async def check_valid(self):
+        html = await utils.fetch(self._home_url)
+        if b'"soldout":1' in html:
+            return False
+        return  True
+
     async def launch(self, force_login=False):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
         self._browser = await pyppeteer.launch(
@@ -145,7 +151,7 @@ class WeReadWebPage(object):
                 "--window-size=%d,%d" % self.__class__.window_size,
             ],
         )
-        self._page = await self._browser.newPage()
+        self._page = (await self._browser.pages())[0]
         await self._page.setViewport(
             {
                 "width": self.__class__.window_size[0],
@@ -167,6 +173,11 @@ class WeReadWebPage(object):
         if self._cookie:
             await self.wait_for_avatar()
         self._page.on("console", self.handle_log)
+
+    async def close(self):
+        if self._browser:
+            await self._browser.close()
+            self._browser = self._page = None
 
     def handle_log(self, message):
         with open("%s.log" % self._book_id, "a+") as fp:

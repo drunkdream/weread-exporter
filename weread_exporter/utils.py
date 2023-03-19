@@ -8,6 +8,10 @@ class LoginRequiredError(RuntimeError):
     pass
 
 
+class LoadChapterFailedError(RuntimeError):
+    pass
+
+
 async def fetch(url, headers=None, respond_with_headers=False):
     headers = headers or {}
     if "User-Agent" not in headers:
@@ -28,6 +32,40 @@ async def fetch(url, headers=None, respond_with_headers=False):
                 logging.exception("Fetch url %s failed" % url)
         else:
             raise RuntimeError("Fetch url %s failed" % url)
+
+
+async def get_book_list(book_list_id):
+    book_list = []
+    url = "https://weread.qq.com/misc/booklist/" + book_list_id
+    html = await fetch(url)
+    html = html.decode()
+    pos = html.find("window.__NUXT__")
+    if pos <= 0:
+        raise RuntimeError("Unexpected html: %s" % html)
+    pos = html.find("bookEntities:", pos)
+    while True:
+        if book_list:
+            pos = html.find('},"', pos)
+            if pos < 0:
+                break
+        pos = html.find('"', pos)
+        pos1 = html.find('"', pos + 1)
+        book_id = html[pos+1:pos1]
+        pos = html.find("title:", pos)
+        pos = html.find('"', pos)
+        pos1 = html.find('"', pos + 1)
+        title = html[pos+1:pos1]
+        book_list.append({
+            "id": wr_hash(book_id),
+            "title": title
+        })
+    return book_list
+
+
+def format_filename(filename):
+    for c in ("/", "\\", ":"):
+        filename = filename.replace(c, "%%%.2x" % ord(c))
+    return filename
 
 
 def md5(s):

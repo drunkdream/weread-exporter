@@ -100,11 +100,16 @@ class WeReadExporter(object):
                 pos1 = output.find(")", pos)
                 url = output[pos + 2 : pos1]
                 logging.info("[%s] Replace image %s" % (self.__class__.__name__, url))
-                data = await utils.fetch(url)
-                image_name = utils.md5(url) + ".jpg"
-                with open(os.path.join(self._image_dir, image_name), "wb") as fp:
-                    fp.write(data)
-                output = output[: pos + 2] + "images/" + image_name + output[pos1:]
+                try:
+                    data = await utils.fetch(url)
+                except:
+                    logging.exception("[%s] Fetch image data of %s failed" % (self.__class__.__name__, url))
+                    pos += 10
+                else:
+                    image_name = utils.md5(url) + ".jpg"
+                    with open(os.path.join(self._image_dir, image_name), "wb") as fp:
+                        fp.write(data)
+                    output = output[: pos + 2] + "images/" + image_name + output[pos1:]
             if not os.path.isfile(chapter_path + ".bak"):
                 os.rename(chapter_path, chapter_path + ".bak")
             with open(chapter_path, "w") as fp:
@@ -264,14 +269,14 @@ class WeReadExporter(object):
         with open(self._cover_image_path, "wb") as fp:
             fp.write(data)
 
-    async def export_markdown(self):
+    async def export_markdown(self, timeout=30, interval=10):
         if not os.path.isdir(self._chapter_dir):
             os.makedirs(self._chapter_dir)
         meta_data = await self._load_meta_data()
         if not os.path.isfile(self._cover_image_path):
             await self.save_cover_image()
 
-        min_wait_time = 10
+        min_wait_time = interval
         for index, chapter in enumerate(meta_data["chapters"]):
             logging.info(
                 "[%s] Check chapter %s/%s"
@@ -292,17 +297,17 @@ class WeReadExporter(object):
                     await self._page.goto_chapter(
                         chapter["id"],
                         check_next_chapter=index < len(meta_data["chapters"]) - 1,
-                        timeout=30,
+                        timeout=timeout,
                     )
                 except:
                     logging.exception(
-                        "[%s] Goto chapter %s failed"
+                        "[%s] Go to chapter %s failed"
                         % (self.__class__.__name__, chapter["title"])
                     )
                 else:
                     break
             else:
-                raise RuntimeError("Load chapter %s failed" % chapter["title"])
+                raise utils.LoadChapterFailedError("Load chapter %s failed" % chapter["title"])
 
             markdown = await self._page.get_markdown()
             logging.info(
