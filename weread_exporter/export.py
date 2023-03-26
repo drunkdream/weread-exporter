@@ -213,7 +213,7 @@ class WeReadExporter(object):
                     section = (epub.Section(chapter["title"]), [])
                     for it in chapter["anchors"]:
                         section[1].append(
-                            epub.Link(xhtml_name, it["title"], str(chapter["id"]))
+                            epub.Link(xhtml_name + "#1", it["title"], str(chapter["id"]))
                         )
                 elif chapter["level"] > 1:
                     section = (toc.pop(-1), [])
