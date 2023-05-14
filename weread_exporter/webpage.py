@@ -140,7 +140,7 @@ class WeReadWebPage(object):
         html = await utils.fetch(self._home_url)
         if b'"soldout":1' in html:
             return False
-        return  True
+        return True
 
     async def launch(self, force_login=False):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
@@ -167,7 +167,7 @@ class WeReadWebPage(object):
             )
             await self._inject_cookie()
         await self._page.goto(self._home_url)
-        await self._page.waitForSelector("div.readerFooter a")
+        # await self.wait_for_selector("div.readerFooter a")
         if force_login:
             await self.check_login()
         if self._cookie:
@@ -178,6 +178,31 @@ class WeReadWebPage(object):
         if self._browser:
             await self._browser.close()
             self._browser = self._page = None
+
+    async def get_html(self):
+        return await self._page.evaluate("document.documentElement.outerHTML;")
+
+    async def screenshot(self, save_path):
+        await self._page.screenshot({"path": save_path})
+
+    async def wait_for_selector(self, selector):
+        try:
+            return await self._page.waitForSelector(selector)
+        except pyppeteer.errors.TimeoutError as ex:
+            html = await self.get_html()
+            html_path = "webpage.html"
+            with open(html_path, "w") as fp:
+                fp.write(html)
+            logging.info(
+                "[%s] Current html saved to %s" % (self.__class__.__name__, html_path)
+            )
+            screenshot_path = "screenshot.jpg"
+            await self.screenshot(screenshot_path)
+            logging.info(
+                "[%s] Current screenshot saved to %s"
+                % (self.__class__.__name__, screenshot_path)
+            )
+            raise ex
 
     def handle_log(self, message):
         with open("%s.log" % self._book_id, "a+") as fp:
@@ -322,7 +347,7 @@ class WeReadWebPage(object):
                 await self.pre_load_page()
                 await self._page.click("button.readerFooter_button")
                 await asyncio.sleep(1)
-                await self._page.waitForSelector("button.readerFooter_button")
+                await self.wait_for_selector("button.readerFooter_button")
             elif result == "下一章":
                 break
             elif result.startswith("登录"):
@@ -345,7 +370,7 @@ class WeReadWebPage(object):
         await self._page.goto(self._url, timeout=1000 * timeout)
         await asyncio.sleep(2)
         if check_next_chapter:
-            await self._page.waitForSelector("button.readerFooter_button")
+            await self.wait_for_selector("button.readerFooter_button")
             try:
                 await self._check_next_page()
             except utils.LoginRequiredError:
