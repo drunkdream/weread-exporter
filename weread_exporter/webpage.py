@@ -169,7 +169,7 @@ class WeReadWebPage(object):
         await self._page.goto(self._home_url)
         # await self.wait_for_selector("div.readerFooter a")
         if force_login:
-            await self.check_login()
+            await self.login()
         if self._cookie:
             await self.wait_for_avatar()
         self._page.on("console", self.handle_log)
