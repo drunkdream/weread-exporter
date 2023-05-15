@@ -314,8 +314,8 @@ class WeReadExporter(object):
                 "[%s] Export chapter %s to %s"
                 % (self.__class__.__name__, chapter["title"], file_path)
             )
-            with open(file_path, "w") as fp:
-                fp.write(markdown)
+            with open(file_path, "wb") as fp:
+                fp.write(markdown.encode("utf-8"))
 
             wait_time = min_wait_time - (time.time() - time0)
             if wait_time > 0:
