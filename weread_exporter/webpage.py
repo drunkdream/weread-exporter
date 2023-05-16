@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import time
 
 import pyppeteer
@@ -142,8 +143,27 @@ class WeReadWebPage(object):
             return False
         return True
 
+    def _check_chrome(self):
+        path_list = os.environ["PATH"].split(";" if sys.platform == "win32" else ":")
+        chrome = "chrome"
+        if sys.platform == "win32":
+            chrome += ".exe"
+        for path in path_list:
+            if os.path.isfile(os.path.join(path, chrome)):
+                break
+        else:
+            if sys.platform == "win32":
+                command = "where chrome"
+            else:
+                command = "which chrome"
+            raise utils.ChromeNotInstalledError(
+                "Please make sure `chrome` is installed, and the install path is added to PATH environment. \nYou can test that with `%s` command."
+                % command
+            )
+
     async def launch(self, force_login=False):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
+        self._check_chrome()
         self._browser = await pyppeteer.launch(
             headless=False,
             executablePath="chrome",
