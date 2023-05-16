@@ -4,6 +4,10 @@ import logging
 import aiohttp
 
 
+class ChromeNotInstalledError(Exception):
+    pass
+
+
 class LoginRequiredError(RuntimeError):
     pass
 
