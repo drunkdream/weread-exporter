@@ -104,7 +104,10 @@ class WeReadExporter(object):
                 try:
                     data = await utils.fetch(url)
                 except:
-                    logging.exception("[%s] Fetch image data of %s failed" % (self.__class__.__name__, url))
+                    logging.exception(
+                        "[%s] Fetch image data of %s failed"
+                        % (self.__class__.__name__, url)
+                    )
                     pos += 10
                 else:
                     image_name = utils.md5(url) + ".jpg"
@@ -214,7 +217,9 @@ class WeReadExporter(object):
                     section = (epub.Section(chapter["title"]), [])
                     for it in chapter["anchors"]:
                         section[1].append(
-                            epub.Link(xhtml_name + "#1", it["title"], str(chapter["id"]))
+                            epub.Link(
+                                xhtml_name + "#1", it["title"], str(chapter["id"])
+                            )
                         )
                 elif chapter["level"] > 1:
                     section = (toc.pop(-1), [])
@@ -308,7 +313,9 @@ class WeReadExporter(object):
                 else:
                     break
             else:
-                raise utils.LoadChapterFailedError("Load chapter %s failed" % chapter["title"])
+                raise utils.LoadChapterFailedError(
+                    "Load chapter %s failed" % chapter["title"]
+                )
 
             markdown = await self._page.get_markdown()
             logging.info(

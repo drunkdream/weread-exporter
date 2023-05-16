@@ -156,7 +156,10 @@ class WeReadWebPage(object):
                 command = "where chrome"
             else:
                 command = "which chrome"
-            raise utils.ChromeNotInstalledError("Please make sure `chrome` is installed, and the install path is added to PATH environment. \nYou can test that with `%s` command." % command)
+            raise utils.ChromeNotInstalledError(
+                "Please make sure `chrome` is installed, and the install path is added to PATH environment. \nYou can test that with `%s` command."
+                % command
+            )
 
     async def launch(self, force_login=False):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))

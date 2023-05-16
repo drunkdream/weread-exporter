@@ -54,15 +54,12 @@ async def get_book_list(book_list_id):
                 break
         pos = html.find('"', pos)
         pos1 = html.find('"', pos + 1)
-        book_id = html[pos+1:pos1]
+        book_id = html[pos + 1 : pos1]
         pos = html.find("title:", pos)
         pos = html.find('"', pos)
         pos1 = html.find('"', pos + 1)
-        title = html[pos+1:pos1]
-        book_list.append({
-            "id": wr_hash(book_id),
-            "title": title
-        })
+        title = html[pos + 1 : pos1]
+        book_list.append({"id": wr_hash(book_id), "title": title})
     return book_list
 
 
