@@ -4,10 +4,16 @@ import logging
 import os
 import sys
 
-from . import export, utils, webpage
+
+def patch_windows():
+   bin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "bin", "win32")
+   os.environ["PATH"] += ";" + bin_path
+   if hasattr(os, 'add_dll_directory'):
+        os.add_dll_directory(bin_path)
 
 
 async def async_main():
+    from . import export, utils, webpage
     parser = argparse.ArgumentParser(
         prog="weread-exporter", description="WeRead book export cmdline tool"
     )
@@ -112,6 +118,8 @@ async def async_main():
 
 
 def main():
+    if sys.platform == "win32":
+        patch_windows()
     logging.root.level = logging.INFO
     handler = logging.StreamHandler()
     fmt = "[%(asctime)s][%(levelname)s]%(message)s"
