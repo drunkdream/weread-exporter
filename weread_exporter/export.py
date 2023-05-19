@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import time
 
 import markdown
@@ -252,11 +253,12 @@ class WeReadExporter(object):
 
     async def epub_to_mobi(self, epub_path, save_path):
         kindlegen_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "bin", "kindlegen"
+            os.path.dirname(os.path.abspath(__file__)), "bin", sys.platform, "kindlegen"
         )
         if not os.path.isfile(kindlegen_path):
             raise RuntimeError("File %s not exist" % kindlegen_path)
-        os.chmod(kindlegen_path, 0o755)
+        if sys.platform != "win32":
+            os.chmod(kindlegen_path, 0o755)
         cmdline = [
             kindlegen_path,
             os.path.abspath(epub_path),
