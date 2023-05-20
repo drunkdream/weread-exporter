@@ -85,11 +85,8 @@ if __name__ == "__main__":
         with open(version_file, "w") as fp:
             fp.write(text)
         cmdline = (
-            "python -m PyInstaller -F -c %s -n weread-exporter --version-file %s"
-            % (
-                main_file,
-                version_file,
-            )
+            "python -m PyInstaller -F -c %s -n weread-exporter --version-file %s  --add-data weread_exporter/hook.js;weread_exporter --add-data weread_exporter/style.css;weread_exporter --add-data weread_exporter/epub.css;weread_exporter --add-data weread_exporter/bin/%s;weread_exporter/bin/%s"
+            % (main_file, version_file, sys.platform, sys.platform)
         )
     else:
         cmdline = (
@@ -125,11 +122,7 @@ if __name__ == "__main__":
         choices=("pyinstaller", "py2exe"),
         default="pyinstaller",
     )
-    parser.add_argument(
-        "version",
-        help="version(1.2.3)",
-        default="1.0.0",
-    )
+    parser.add_argument("--version", help="version(1.2.3)", default="1.0.0")
     args = parser.parse_args()
 
     sys.exit(build(args.backend, args.version))
