@@ -1,4 +1,6 @@
+build/
 cache/
+dist/
 output/
 *.pyc
 *.epub
