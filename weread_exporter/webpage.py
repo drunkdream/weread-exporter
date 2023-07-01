@@ -145,28 +145,28 @@ class WeReadWebPage(object):
 
     def _check_chrome(self):
         path_list = os.environ["PATH"].split(";" if sys.platform == "win32" else ":")
-        chrome = "chrome"
-        if sys.platform == "win32":
-            chrome += ".exe"
-        for path in path_list:
-            if os.path.isfile(os.path.join(path, chrome)):
-                break
-        else:
+        for chrome in ("chrome", "google-chrome"):
             if sys.platform == "win32":
-                command = "where chrome"
-            else:
-                command = "which chrome"
-            raise utils.ChromeNotInstalledError(
-                "Please make sure `chrome` is installed, and the install path is added to PATH environment. \nYou can test that with `%s` command."
-                % command
-            )
+                chrome += ".exe"
+            for path in path_list:
+                if os.path.isfile(os.path.join(path, chrome)):
+                    return chrome
 
-    async def launch(self, force_login=False):
+        if sys.platform == "win32":
+            command = "where chrome"
+        else:
+            command = "which chrome"
+        raise utils.ChromeNotInstalledError(
+            "Please make sure `chrome` is installed, and the install path is added to PATH environment. \nYou can test that with `%s` command."
+            % command
+        )
+
+    async def launch(self, headless=False, force_login=False):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
-        self._check_chrome()
+        chrome = self._check_chrome()
         self._browser = await pyppeteer.launch(
-            headless=False,
-            executablePath="chrome",
+            headless=headless,
+            executablePath=chrome,
             args=[
                 "--window-size=%d,%d" % self.__class__.window_size,
             ],
@@ -205,9 +205,9 @@ class WeReadWebPage(object):
     async def screenshot(self, save_path):
         await self._page.screenshot({"path": save_path})
 
-    async def wait_for_selector(self, selector):
+    async def wait_for_selector(self, selector, timeout=30):
         try:
-            return await self._page.waitForSelector(selector)
+            return await self._page.waitForSelector(selector, timeout=timeout)
         except pyppeteer.errors.TimeoutError as ex:
             html = await self.get_html()
             html_path = "webpage.html"
@@ -356,6 +356,10 @@ class WeReadWebPage(object):
 
     async def _check_next_page(self):
         while True:
+            try:
+                await self.wait_for_selector("button.readerFooter_button", timeout=10)
+            except pyppeteer.errors.TimeoutError:
+                break
             result = await self._page.evaluate(
                 "document.getElementsByClassName('readerFooter_button')[0].innerText;"
             )
@@ -367,7 +371,6 @@ class WeReadWebPage(object):
                 await self.pre_load_page()
                 await self._page.click("button.readerFooter_button")
                 await asyncio.sleep(1)
-                await self.wait_for_selector("button.readerFooter_button")
             elif result == "下一章":
                 break
             elif result.startswith("登录"):
@@ -382,22 +385,19 @@ class WeReadWebPage(object):
             utils.wr_hash(str(chapter_id)),
         )
 
-    async def goto_chapter(self, chapter_id, check_next_chapter=True, timeout=60):
+    async def goto_chapter(self, chapter_id, timeout=60):
         logging.info("[%s] Go to chapter %s" % (self.__class__.__name__, chapter_id))
         # await self.clear_cache()
         await self.pre_load_page()
         self._url = self._get_chapter_url(chapter_id)
         await self._page.goto(self._url, timeout=1000 * timeout)
-        await asyncio.sleep(2)
-        if check_next_chapter:
-            await self.wait_for_selector("button.readerFooter_button")
-            try:
-                await self._check_next_page()
-            except utils.LoginRequiredError:
-                await self.login()
-                return await self.goto_chapter(
-                    chapter_id, check_next_chapter=check_next_chapter, timeout=timeout
-                )
+        try:
+            await self._check_next_page()
+        except utils.LoginRequiredError:
+            await self.login()
+            return await self.goto_chapter(
+                chapter_id, timeout=timeout
+            )
 
     async def clear_cache(self):
         await self._page.evaluate("canvasContextHandler.clearCanvasCache();")
