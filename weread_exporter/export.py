@@ -311,7 +311,6 @@ class WeReadExporter(object):
                 try:
                     await self._page.goto_chapter(
                         chapter["id"],
-                        check_next_chapter=index < len(meta_data["chapters"]) - 1,
                         timeout=timeout,
                     )
                 except:
