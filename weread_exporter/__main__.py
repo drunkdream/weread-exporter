@@ -6,14 +6,15 @@ import sys
 
 
 def patch_windows():
-   bin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "bin", "win32")
-   os.environ["PATH"] += ";" + bin_path
-   if hasattr(os, 'add_dll_directory'):
+    bin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "bin", "win32")
+    os.environ["PATH"] += ";" + bin_path
+    if hasattr(os, "add_dll_directory"):
         os.add_dll_directory(bin_path)
 
 
 async def async_main():
     from . import export, utils, webpage
+
     parser = argparse.ArgumentParser(
         prog="weread-exporter", description="WeRead book export cmdline tool"
     )
@@ -36,6 +37,9 @@ async def async_main():
         help="load chapter page interval time",
         type=int,
         default=10,
+    )
+    parser.add_argument(
+        "--headless", help="chrome headless", action="store_true", default=False
     )
     parser.add_argument(
         "--force-login", help="force login first", action="store_true", default=False
@@ -66,7 +70,7 @@ async def async_main():
         exporter = export.WeReadExporter(page, save_path)
         while True:
             try:
-                await page.launch(args.force_login)
+                await page.launch(headless=args.headless, force_login=args.force_login)
             except RuntimeError:
                 logging.exception("Launch book %s home page failed" % book_id)
                 continue
@@ -92,13 +96,12 @@ async def async_main():
                 logging.info("Save file %s complete" % save_path)
 
         if "pdf" in args.output_format:
-            for font_size, desc in ((14, "small"), (32, "large")):
-                save_path = os.path.join(output_dir, "%s-%s.pdf" % (title, desc))
-                if os.path.isfile(save_path):
-                    logging.info("File %s exist, ignore export" % save_path)
-                else:
-                    await exporter.markdown_to_pdf(save_path, font_size=font_size)
-                    logging.info("Save file %s complete" % save_path)
+            save_path = os.path.join(output_dir, "%s.pdf" % title)
+            if os.path.isfile(save_path):
+                logging.info("File %s exist, ignore export" % save_path)
+            else:
+                await exporter.markdown_to_pdf(save_path, font_size=14)
+                logging.info("Save file %s complete" % save_path)
 
         if "mobi" in args.output_format:
             if sys.platform != "linux":
@@ -126,7 +129,7 @@ def main():
     formatter = logging.Formatter(fmt)
     handler.setFormatter(formatter)
     logging.root.addHandler(handler)
-    loop =  asyncio.new_event_loop()
+    loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(async_main())
 
