@@ -299,7 +299,7 @@ class WeReadExporter(object):
             )
 
             file_path = self._make_chapter_path(index, chapter["id"])
-            if os.path.isfile(file_path):
+            if os.path.isfile(file_path) and os.path.getsize(file_path) > 3:
                 continue
             logging.info(
                 "[%s] File %s not exist" % (self.__class__.__name__, file_path)
@@ -331,7 +331,7 @@ class WeReadExporter(object):
                 % (self.__class__.__name__, chapter["title"], file_path)
             )
             with open(file_path, "wb") as fp:
-                fp.write(markdown.encode())
+                fp.write(markdown.encode('utf-8', errors='replace'))
 
             wait_time = min_wait_time - (time.time() - time0)
             if wait_time > 0:

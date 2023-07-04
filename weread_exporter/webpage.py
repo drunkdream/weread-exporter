@@ -152,6 +152,12 @@ class WeReadWebPage(object):
                 if os.path.isfile(os.path.join(path, chrome)):
                     return chrome
 
+        if sys.platform == "darwin":
+            chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            if os.path.isfile(chrome):
+                return chrome
+
+
         if sys.platform == "win32":
             command = "where chrome"
         else:
@@ -357,8 +363,9 @@ class WeReadWebPage(object):
     async def _check_next_page(self):
         while True:
             try:
-                await self.wait_for_selector("button.readerFooter_button", timeout=10)
+                await self.wait_for_selector("button.readerFooter_button", timeout=60000)
             except pyppeteer.errors.TimeoutError:
+                logging.info("[%s] load selector timeout " % self.__class__.__name__)
                 break
             result = await self._page.evaluate(
                 "document.getElementsByClassName('readerFooter_button')[0].innerText;"
