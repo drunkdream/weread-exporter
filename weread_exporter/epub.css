@@ -3,7 +3,7 @@ html {
     --alice-title-color: #0079D2;
     --alice-font-color: rgb(102, 55, 24);
     --alice-important-color: rgb(162, 42, 42);
-    color: rgb(102, 55, 24);
+    color: rgb(50, 50, 50);
     /*font-size: 16px;*/
     font-family: "Helvetica";
 }
@@ -23,13 +23,13 @@ h4 {
 }
 
 strong {
-    color: #a22a2a;
+    color: #333333;
     font-weight: bold;
 }
 
 p {
     font-size: 1em;
-    color: rgb(102, 55, 24);
+    color: rgb(50, 50, 50);
 }
 
 code {
@@ -42,7 +42,7 @@ code {
 }
 
 epub-code {
-    color: #f14f75;
+    color: #333333;
     padding: 0 5px;
     margin: 0 2px;
     border-radius: 5px;
