@@ -39,6 +39,10 @@ async def async_main():
         default=10,
     )
     parser.add_argument(
+        "--css-file",
+        help="overide default css style",
+    )
+    parser.add_argument(
         "--headless", help="chrome headless", action="store_true", default=False
     )
     parser.add_argument(
@@ -48,6 +52,13 @@ async def async_main():
     args.output_format = args.output_format or ["epub"]
     if "mobi" in args.output_format and "epub" not in args.output_format:
         args.output_format.append("epub")
+
+    extra_css = None
+    if args.css_file:
+        if not os.path.isfile(args.css_file):
+            raise RuntimeError("CSS file %s not exist" % args.css_file)
+        with open(args.css_file) as fp:
+            extra_css = fp.read()
 
     if "_" in args.book_id:
         # book list id
@@ -92,7 +103,7 @@ async def async_main():
             if os.path.isfile(save_path):
                 logging.info("File %s exist, ignore export" % save_path)
             else:
-                await exporter.markdown_to_epub(save_path)
+                await exporter.markdown_to_epub(save_path, extra_css=extra_css)
                 logging.info("Save file %s complete" % save_path)
 
         if "pdf" in args.output_format:
@@ -100,7 +111,7 @@ async def async_main():
             if os.path.isfile(save_path):
                 logging.info("File %s exist, ignore export" % save_path)
             else:
-                await exporter.markdown_to_pdf(save_path, font_size=14)
+                await exporter.markdown_to_pdf(save_path, extra_css=extra_css)
                 logging.info("Save file %s complete" % save_path)
 
         if "mobi" in args.output_format:
