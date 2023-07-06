@@ -141,7 +141,7 @@ class WeReadExporter(object):
             )
         return html
 
-    async def markdown_to_pdf(self, save_path, font_size=None, dump_html=False):
+    async def markdown_to_pdf(self, save_path, extra_css=None, dump_html=False):
         meta_data = await self._load_meta_data()
         raw_html = '<img src="cover.jpg" style="width: 100%;">\n'
         for index, chapter in enumerate(meta_data["chapters"]):
@@ -159,14 +159,14 @@ class WeReadExporter(object):
         css_path = os.path.join(current_path, "style.css")
         with open(css_path) as fp:
             raw_css = fp.read()
-            if font_size:
-                raw_css = raw_css.replace("14px", "%dpx" % font_size)
+            if extra_css:
+                raw_css += "\n" + extra_css
             css.append(CSS(string=raw_css))
 
         # Generate PDF
         html.write_pdf(save_path, stylesheets=css)
 
-    async def markdown_to_epub(self, save_path):
+    async def markdown_to_epub(self, save_path, extra_css=None):
         meta_data = await self._load_meta_data()
         book = epub.EpubBook()
         book.set_identifier("id123456")
@@ -181,6 +181,8 @@ class WeReadExporter(object):
         css_path = os.path.join(current_path, "epub.css")
         with open(css_path) as fp:
             style = fp.read()
+        if extra_css:
+            style += "\n" + extra_css
         default_css = epub.EpubItem(
             uid="style_default",
             file_name="style/default.css",
