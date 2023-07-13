@@ -1,5 +1,7 @@
 aiohttp
+beautifulsoup4
 ebooklib
 markdown
+Pillow; sys_platform == 'win32'
 pyppeteer
 weasyprint==52.5
