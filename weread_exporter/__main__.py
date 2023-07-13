@@ -27,20 +27,13 @@ async def async_main():
         choices=["md", "epub", "pdf", "mobi"],
     )
     parser.add_argument(
-        "--load-timeout",
-        help="load chapter page timeout",
-        type=int,
-        default=30,
+        "--load-timeout", help="load chapter page timeout", type=int, default=30,
     )
     parser.add_argument(
-        "--load-interval",
-        help="load chapter page interval time",
-        type=int,
-        default=10,
+        "--load-interval", help="load chapter page interval time", type=int, default=10,
     )
     parser.add_argument(
-        "--css-file",
-        help="overide default css style",
+        "--css-file", help="overide default css style",
     )
     parser.add_argument(
         "--headless", help="chrome headless", action="store_true", default=False
@@ -111,7 +104,12 @@ async def async_main():
             if os.path.isfile(save_path):
                 logging.info("File %s exist, ignore export" % save_path)
             else:
-                await exporter.markdown_to_pdf(save_path, extra_css=extra_css)
+                image_format = "jpg"
+                if sys.platform == "win32":
+                    image_format = "png"
+                await exporter.markdown_to_pdf(
+                    save_path, extra_css=extra_css, image_format=image_format,
+                )
                 logging.info("Save file %s complete" % save_path)
 
         if "mobi" in args.output_format:
