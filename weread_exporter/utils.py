@@ -94,3 +94,10 @@ def wr_hash(s):
         result += hash[: 20 - len(result)]
     result += hashlib.md5(result.encode()).hexdigest()[:3]
     return result
+
+
+def save_to_png(img_path, png_path):
+    from PIL import Image
+
+    img = Image.open(img_path)
+    img.save(png_path)
