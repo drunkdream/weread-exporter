@@ -5,6 +5,7 @@ import os
 import sys
 import time
 
+import bs4
 import markdown
 
 from ebooklib import epub
@@ -141,7 +142,7 @@ class WeReadExporter(object):
             )
         return html
 
-    async def markdown_to_pdf(self, save_path, extra_css=None, dump_html=False):
+    async def markdown_to_pdf(self, save_path, extra_css=None, image_format="jpg", dump_html=False):
         meta_data = await self._load_meta_data()
         raw_html = '<img src="cover.jpg" style="width: 100%;">\n'
         for index, chapter in enumerate(meta_data["chapters"]):
@@ -150,6 +151,17 @@ class WeReadExporter(object):
         raw_html = raw_html.replace(
             "<pre><code>", "<pre><code>\n"
         )  # Fix unexpected indent
+        if image_format == "png":
+            soup = bs4.BeautifulSoup(raw_html, features="html.parser")
+            for img in soup.find_all("img"):
+                src = os.path.join(self._save_dir, img.attrs["src"])
+                if not src.endswith(".png"):
+                    png_path = src[:-3] + "png"
+                    utils.save_to_png(src, png_path)
+                    img.attrs["src"] = img.attrs["src"][:-3] + "png"
+
+            raw_html = soup.prettify()
+
         if dump_html:
             html_path = os.path.join(self._save_dir, "output.html")
             with open(html_path, "w") as fp:
