@@ -142,7 +142,9 @@ class WeReadExporter(object):
             )
         return html
 
-    async def markdown_to_pdf(self, save_path, extra_css=None, image_format="jpg", dump_html=False):
+    async def markdown_to_pdf(
+        self, save_path, extra_css=None, image_format="jpg", dump_html=False
+    ):
         meta_data = await self._load_meta_data()
         raw_html = '<img src="cover.jpg" style="width: 100%;">\n'
         for index, chapter in enumerate(meta_data["chapters"]):
@@ -323,10 +325,19 @@ class WeReadExporter(object):
             for _ in range(3):
                 time0 = time.time()
                 try:
-                    await self._page.goto_chapter(
-                        chapter["id"],
-                        timeout=timeout,
+                    await asyncio.wait_for(
+                        self._page.goto_chapter(
+                            chapter["id"],
+                            timeout=timeout,
+                        ),
+                        timeout=timeout + 60,
+                    )  # avoid pyppeteer hangs
+                except asyncio.TimeoutError:
+                    raise utils.LoadChapterFailedError(
+                        "Load chapter %s timeout" % chapter["title"]
                     )
+                except KeyboardInterrupt as ex:
+                    raise ex
                 except:
                     logging.exception(
                         "[%s] Go to chapter %s failed"
@@ -345,7 +356,7 @@ class WeReadExporter(object):
                 % (self.__class__.__name__, chapter["title"], file_path)
             )
             with open(file_path, "wb") as fp:
-                fp.write(markdown.encode('utf-8', errors='replace'))
+                fp.write(markdown.encode("utf-8", errors="replace"))
 
             wait_time = min_wait_time - (time.time() - time0)
             if wait_time > 0:
