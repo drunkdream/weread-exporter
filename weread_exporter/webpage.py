@@ -157,7 +157,6 @@ class WeReadWebPage(object):
             if os.path.isfile(chrome):
                 return chrome
 
-
         if sys.platform == "win32":
             command = "where chrome"
         else:
@@ -353,6 +352,15 @@ class WeReadWebPage(object):
         await self._page.waitForSelector("button.readerFooter_button", timeout=60000)
 
     async def get_markdown(self):
+        script = "canvasContextHandler.data.complete;"
+        time0 = time.time()
+        while time.time() - time0 < 10:
+            result = await self._page.evaluate(script)
+            if result:
+                break
+            await asyncio.sleep(1)
+        else:
+            raise RuntimeError("Wait for creating markdown timeout")
         script = "canvasContextHandler.data.markdown;"
         result = await self._page.evaluate(script)
         if not result:
@@ -363,7 +371,9 @@ class WeReadWebPage(object):
     async def _check_next_page(self):
         while True:
             try:
-                await self.wait_for_selector("button.readerFooter_button", timeout=60000)
+                await self.wait_for_selector(
+                    "button.readerFooter_button", timeout=60000
+                )
             except pyppeteer.errors.TimeoutError:
                 logging.info("[%s] load selector timeout " % self.__class__.__name__)
                 break
@@ -402,9 +412,7 @@ class WeReadWebPage(object):
             await self._check_next_page()
         except utils.LoginRequiredError:
             await self.login()
-            return await self.goto_chapter(
-                chapter_id, timeout=timeout
-            )
+            return await self.goto_chapter(chapter_id, timeout=timeout)
 
     async def clear_cache(self):
         await self._page.evaluate("canvasContextHandler.clearCanvasCache();")
