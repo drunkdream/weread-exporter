@@ -49,6 +49,7 @@ function getHrElemList() {
 
 let canvasContextHandler = {
   data: {
+    complete: false,
     preList: [],
     imgList: [],
     hrList: [],
@@ -172,12 +173,29 @@ let canvasContextHandler = {
             }
             that.data.markdown += args[0];
             that.data.lastPos = [args[1], args[2]];
+          } else if (name == "drawImage") {
+
           } else if (name === "restore") {
+            if (document.body.scrollHeight <= window.innerHeight) {
+              document.body.style.height = (window.innerHeight + 10) + 'px'; // make page scrollable
+            }
+            scrollTo(0, document.body.scrollHeight); // ensure last image to show
             if (that.data.highlightMode) {
               that.data.markdown += "`";
               that.data.highlightMode = false;
             }
             that.checkElement(that.data.lastPos[1], that.data.lastPos[1] + 200);
+            setTimeout(function () {
+              let imgList = getImgElemList();
+              if (imgList.length > that.data.imgList.length) {
+                console.log("Found new images", that.data.imgList.length, "=>", imgList.length);
+                for (let i = that.data.imgList.length; i < imgList.length; i++) {
+                  that.data.markdown += "\n\n![](" + imgList[i][2] + ")\n";
+                }
+              }
+              that.data.complete = true;
+            }, 1000);
+
           } else if (name === "clearRect") {
             that.clearCanvasCache();
           } else {
