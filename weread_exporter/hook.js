@@ -49,6 +49,7 @@ function getHrElemList() {
 
 let canvasContextHandler = {
   data: {
+    complete: false,
     preList: [],
     imgList: [],
     hrList: [],
@@ -175,7 +176,10 @@ let canvasContextHandler = {
           } else if (name == "drawImage") {
 
           } else if (name === "restore") {
-            scrollTo(0, document.body.scrollHeight);
+            if (document.body.scrollHeight <= window.innerHeight) {
+              document.body.style.height = (window.innerHeight + 10) + 'px'; // make page scrollable
+            }
+            scrollTo(0, document.body.scrollHeight); // ensure last image to show
             if (that.data.highlightMode) {
               that.data.markdown += "`";
               that.data.highlightMode = false;
@@ -189,6 +193,7 @@ let canvasContextHandler = {
                   that.data.markdown += "\n\n![](" + imgList[i][2] + ")\n";
                 }
               }
+              that.data.complete = true;
             }, 1000);
 
           } else if (name === "clearRect") {
