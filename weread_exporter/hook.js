@@ -81,13 +81,18 @@ let canvasContextHandler = {
         break;
       }
     }
-
+    
+    let is_over = true;
+    let is_catch = false;
     for (let img of this.data.imgList) {
       if (img[1] > start_y && img[1] < end_y) {
         this.ensureHighlightClosed();
         this.data.markdown += "\n\n![](" + img[2] + ")\n";
-        break;
+        is_over = false;
+        is_catch = true;
       }
+      if (is_catch && is_over) break;
+      is_over =true;
     }
 
     for (let hr of this.data.hrList) {
