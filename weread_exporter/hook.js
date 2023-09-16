@@ -197,6 +197,7 @@ let canvasContextHandler = {
                 for (let i = that.data.imgList.length; i < imgList.length; i++) {
                   that.data.markdown += "\n\n![](" + imgList[i][2] + ")\n";
                 }
+                that.data.imgList.length = imgList.length;
               }
               that.data.complete = true;
             }, 1000);
