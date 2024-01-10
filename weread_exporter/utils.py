@@ -16,6 +16,10 @@ class LoadChapterFailedError(RuntimeError):
     pass
 
 
+class InvalidUserError(RuntimeError):
+    pass
+
+
 async def fetch(url, headers=None, respond_with_headers=False):
     headers = headers or {}
     if "User-Agent" not in headers:

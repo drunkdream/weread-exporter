@@ -66,7 +66,7 @@ class WeReadWebPage(object):
     async def get_user_info(self):
         vid = self._cookie.get("wr_vid")
         if not vid:
-            raise RuntimeError("Invalid cookie: %s" % self._format_cookie())
+            raise utils.InvalidUserError("Invalid cookie: %s" % self._format_cookie())
         url = "%s/web/user?userVid=%s" % (self.__class__.root_url, vid)
         headers = {"Cookie": self._format_cookie()}
         rsp = await utils.fetch(url, headers=headers)
@@ -92,7 +92,10 @@ class WeReadWebPage(object):
             headers = {"Cookie": self._format_cookie()}
             rsp = await utils.fetch(url, headers=headers)
             rsp = json.loads(rsp.decode())
-        if rsp.get("errCode"):
+        elif rsp.get("errCode") == -2010:
+            # 用户不存在
+            raise utils.InvalidUserError("User %s not found" % vid)
+        elif rsp.get("errCode"):
             raise RuntimeError("Get user info failed: %s" % rsp)
         return rsp
 
@@ -185,12 +188,20 @@ class WeReadWebPage(object):
             }
         )
         if self._cookie:
-            user_info = await self.get_user_info()
-            logging.info(
-                "[%s] Current login user is %s"
-                % (self.__class__.__name__, user_info["name"])
-            )
-            await self._inject_cookie()
+            try:
+                user_info = await self.get_user_info()
+            except utils.InvalidUserError as ex:
+                logging.warning(
+                    "[%s] Get user error: %s" % (self.__class__.__name__, ex)
+                )
+                self._cookie = {}
+            else:
+                logging.info(
+                    "[%s] Current login user is %s"
+                    % (self.__class__.__name__, user_info["name"])
+                )
+                await self._inject_cookie()
+
         await self._page.goto(self._home_url)
         # await self.wait_for_selector("div.readerFooter a")
         if force_login:
@@ -230,7 +241,7 @@ class WeReadWebPage(object):
             raise ex
 
     def handle_log(self, message):
-        with open("%s.log" % self._book_id, "a+") as fp:
+        with open("%s.log" % self._book_id, "a+", encoding="utf-8") as fp:
             fp.write("[%s] %s\n" % (self._url, message.text))
 
     async def wait_for_avatar(self, timeout=30):

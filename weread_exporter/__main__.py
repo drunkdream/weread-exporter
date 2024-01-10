@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 
 
 def patch_windows():
@@ -27,13 +28,20 @@ async def async_main():
         choices=["md", "epub", "pdf", "mobi"],
     )
     parser.add_argument(
-        "--load-timeout", help="load chapter page timeout", type=int, default=30,
+        "--load-timeout",
+        help="load chapter page timeout",
+        type=int,
+        default=30,
     )
     parser.add_argument(
-        "--load-interval", help="load chapter page interval time", type=int, default=10,
+        "--load-interval",
+        help="load chapter page interval time",
+        type=int,
+        default=10,
     )
     parser.add_argument(
-        "--css-file", help="overide default css style",
+        "--css-file",
+        help="overide default css style",
     )
     parser.add_argument(
         "--headless", help="chrome headless", action="store_true", default=False
@@ -77,6 +85,7 @@ async def async_main():
                 await page.launch(headless=args.headless, force_login=args.force_login)
             except RuntimeError:
                 logging.exception("Launch book %s home page failed" % book_id)
+                time.sleep(2)
                 continue
 
             try:
@@ -108,7 +117,9 @@ async def async_main():
                 if sys.platform == "win32":
                     image_format = "png"
                 await exporter.markdown_to_pdf(
-                    save_path, extra_css=extra_css, image_format=image_format,
+                    save_path,
+                    extra_css=extra_css,
+                    image_format=image_format,
                 )
                 logging.info("Save file %s complete" % save_path)
 
