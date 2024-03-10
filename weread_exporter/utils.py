@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import random
 
 import aiohttp
 
@@ -20,12 +21,17 @@ class InvalidUserError(RuntimeError):
     pass
 
 
+def generate_user_agent():
+    user_agent_tmpl = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%d.0.0.0 Safari/537.36"
+    return user_agent_tmpl % random.randint(90, 120)
+
+
 async def fetch(url, headers=None, respond_with_headers=False):
     headers = headers or {}
     if "User-Agent" not in headers:
         headers[
             "User-Agent"
-        ] = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36"
+        ] = generate_user_agent()
     async with aiohttp.ClientSession() as session:
         for _ in range(3):
             try:
