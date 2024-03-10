@@ -68,7 +68,7 @@ class WeReadWebPage(object):
         if not vid:
             raise utils.InvalidUserError("Invalid cookie: %s" % self._format_cookie())
         url = "%s/web/user?userVid=%s" % (self.__class__.root_url, vid)
-        headers = {"Cookie": self._format_cookie()}
+        headers = {"Referer": self.__class__.root_url, "Cookie": self._format_cookie()}
         rsp = await utils.fetch(url, headers=headers)
         rsp = json.loads(rsp.decode())
         if rsp.get("errCode") == -2012:
@@ -89,7 +89,7 @@ class WeReadWebPage(object):
                     "[%s] Update cookie %s" % (self.__class__.__name__, cookie)
                 )
             self._save_cookie()
-            headers = {"Cookie": self._format_cookie()}
+            headers["Cookie"] = self._format_cookie()
             rsp = await utils.fetch(url, headers=headers)
             rsp = json.loads(rsp.decode())
         elif rsp.get("errCode") == -2010:
@@ -180,6 +180,29 @@ class WeReadWebPage(object):
             ],
         )
         self._page = (await self._browser.pages())[0]
+        await self._page.evaluateOnNewDocument("""() => {
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => {
+                    console.log('navigator.webdriver is called');
+                    console.trace();
+                    return undefined;
+                }
+            });
+
+            var _hasOwnProperty = Object.prototype.hasOwnProperty;
+            Object.prototype.hasOwnProperty = function (key) {
+                if (key === 'webdriver') {
+                    console.log('hasOwnProperty', key, 'is called');
+                    console.trace();
+                    return false;
+                }
+                return _hasOwnProperty.call(this, key);
+            };
+        }
+        """)
+
+        await self._page.goto(self._home_url)
+
         await self._page.setViewport(
             {
                 "width": self.__class__.window_size[0],
@@ -250,7 +273,7 @@ class WeReadWebPage(object):
             avatar_url = await self._page.evaluate(
                 "document.querySelector('img.wr_avatar_img') && document.querySelector('img.wr_avatar_img').getAttribute('src');"
             )
-            if avatar_url == None or not avatar_url.endswith("Default.svg"):
+            if avatar_url is None or not avatar_url.endswith("Default.svg"):
                 break
             await asyncio.sleep(5)
         else:
