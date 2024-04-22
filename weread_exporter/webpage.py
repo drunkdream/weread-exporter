@@ -250,7 +250,9 @@ class WeReadWebPage(object):
         except pyppeteer.errors.TimeoutError as ex:
             html = await self.get_html()
             html_path = "webpage.html"
-            with open(html_path, "w") as fp:
+            with open(html_path, "wb") as fp:
+                if not isinstance(html, bytes):
+                    html = html.encode("utf8")
                 fp.write(html)
             logging.info(
                 "[%s] Current html saved to %s" % (self.__class__.__name__, html_path)
