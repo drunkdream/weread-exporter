@@ -351,6 +351,7 @@ class WeReadWebPage(object):
             ) as fp:
                 hook_script = fp.read()
             inject_script = "<script>\n%s</script>\n" % hook_script
+            body = body.replace(b'"useHorizonReader":1', b'"useHorizonReader":0')
             body = body.replace(b'"soldout":1', b'"soldout":0')
             response = {"body": inject_script.encode() + body}
             await request.respond(response)
