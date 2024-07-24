@@ -396,13 +396,13 @@ class WeReadWebPage(object):
             if result:
                 break
             await asyncio.sleep(1)
-        else:
-            raise RuntimeError("Wait for creating markdown timeout")
         script = "canvasContextHandler.data.markdown;"
         result = await self._page.evaluate(script)
         if not result:
             await self._page.evaluate("canvasContextHandler.updateMarkdown();")
             result = await self._page.evaluate(script)
+            if not result:
+                raise RuntimeError("Wait for creating markdown timeout")
         return result
 
     async def _check_next_page(self):
