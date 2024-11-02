@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import sys
 import time
 import urllib.parse
@@ -189,7 +190,6 @@ class WeReadWebPage(object):
             args.append("--headless")
             if sys.platform == "linux" and os.getuid() == 0:
                 args.append("--no-sandbox")
-        use_default_profile = False
         if use_default_profile:
             args.append("--user-data-dir")
         else:
@@ -440,7 +440,9 @@ class WeReadWebPage(object):
             (".js", ".css", ".jpg", ".png", ".gif", ".svg")
         )
         status = 200
-        headers = {}
+        headers = {
+            "Server": "nginx/1.20.2",
+        }
         body = b""
         if request.method == "OPTIONS":
             headers = {
@@ -450,12 +452,18 @@ class WeReadWebPage(object):
             }
         elif request.method == "GET" and is_resource_file:
             status, headers, body = await self._get_from_cache_or_server(request.url)
+        elif "/web/book/read" in request.url:
+            body = b'{"succ":1,"synckey":%d}' % random.randint(10000000, 100000000)
+            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers["Content-Length"] = str(len(body))
+            logging.info(
+                "[%s][%s] Url %s return mock data"
+                % (self.__class__.__name__, request.method, request.url)
+            )
         elif "sentry_key=" in request.url:
             status = 200
-            headers = {
-                "Content-Type": "application/json",
-                "Content-Length": "2",
-            }
+            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers["Content-Length"] = str(len(body))
             body = b"{}"
             logging.info(
                 "[%s][%s] Url %s return mock data"
@@ -466,7 +474,7 @@ class WeReadWebPage(object):
         elif "/hera/chlog" in request.url:
             body = b'{"ret":0}'
             headers["Content-Type"] = "application/json; charset=utf-8"
-            headers["Content-Length"] = len(body)
+            headers["Content-Length"] = str(len(body))
             logging.info(
                 "[%s][%s] Url %s return mock data"
                 % (self.__class__.__name__, request.method, request.url)

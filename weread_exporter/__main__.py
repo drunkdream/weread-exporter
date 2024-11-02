@@ -3,7 +3,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 
 
 def patch_windows():
@@ -11,6 +10,18 @@ def patch_windows():
     os.environ["PATH"] += ";" + bin_path
     if hasattr(os, "add_dll_directory"):
         os.add_dll_directory(bin_path)
+
+
+def patch_generateRequestHash():
+    from pyppeteer import network_manager
+
+    orig_generateRequestHash = network_manager.generateRequestHash
+
+    def patched_generateRequestHash(request):
+        request["headers"].pop("Origin", None)
+        return orig_generateRequestHash(request)
+
+    network_manager.generateRequestHash = patched_generateRequestHash
 
 
 async def async_main():
@@ -84,7 +95,7 @@ async def async_main():
         page = webpage.WeReadWebPage(
             book_id,
             cookie_path=os.path.join("cache", "cookie.txt"),
-            webcache_path="cache"
+            webcache_path="cache",
         )
         if not await page.check_valid():
             logging.warning("Book %s status is invalid, stop exporting" % book_id)
@@ -162,6 +173,7 @@ async def async_main():
 def main():
     if sys.platform == "win32":
         patch_windows()
+    patch_generateRequestHash()
     logging.root.level = logging.INFO
     handler = logging.StreamHandler()
     fmt = "[%(asctime)s][%(levelname)s]%(message)s"
