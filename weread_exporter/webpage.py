@@ -182,6 +182,7 @@ class WeReadWebPage(object):
         force_login=False,
         use_default_profile=False,
         mock_user_agent=False,
+        proxy_server=None
     ):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
         chrome = self._check_chrome()
@@ -196,6 +197,8 @@ class WeReadWebPage(object):
             args.append("--window-size=%d,%d" % self.__class__.window_size)
         if mock_user_agent:
             args.append('--user-agent="%s"' % utils.generate_user_agent())
+        if proxy_server:
+            args.append("--proxy-server=%s" % proxy_server)
         args.append("about:blank")
         logging.info(
             "[%s] Chrome args: chrome %s" % (self.__class__.__name__, " ".join(args))
@@ -210,40 +213,46 @@ class WeReadWebPage(object):
         self._page = (await self._browser.pages())[0]
         await self._page.evaluateOnNewDocument(
             """() => {
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => {
-                    console.log('navigator.webdriver is called');
-                    console.trace();
-                    return undefined;
-                }
-            });
-            var _hasOwnProperty = Object.prototype.hasOwnProperty;
-            Object.prototype.hasOwnProperty = function (key) {
-                if (key === 'webdriver') {
-                    console.log('hasOwnProperty', key, 'is called');
-                    console.trace();
-                    return false;
-                }
-                return _hasOwnProperty.call(this, key);
-            };
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5],
-            });
-            Object.defineProperty(window, 'PluginArray', {
-                get: () => Array,
-            });q
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['en-US', 'en'],
-            });
-            window.chrome = {
+            if (navigator.webdriver) {
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => {
+                        console.log('navigator.webdriver is called');
+                        console.trace();
+                        return undefined;
+                    }
+                });
+                var _hasOwnProperty = Object.prototype.hasOwnProperty;
+                Object.prototype.hasOwnProperty = function (key) {
+                    if (key === 'webdriver') {
+                        console.log('hasOwnProperty', key, 'is called');
+                        console.trace();
+                        return false;
+                    }
+                    return _hasOwnProperty.call(this, key);
+                };
+                const originalQuery = navigator.permissions.query;
+                navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+            }
+            if (navigator.plugins.length === 0) {
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+                Object.defineProperty(window, 'PluginArray', {
+                    get: () => Array,
+                });
+            }
+            if (navigator.languages.length === 0) {
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en'],
+                });
+            }
+            window.chrome = window.chrome || {
                 runtime: {},
             };
-            const originalQuery = navigator.permissions.query;
-            navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
-                originalQuery(parameters)
-            );
         }
         """
         )

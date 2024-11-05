@@ -72,6 +72,10 @@ async def async_main():
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--proxy-server",
+        help="http proxy server, e.g. http://127.0.0.1:8888",
+    )
     args = parser.parse_args()
     args.output_format = args.output_format or ["epub"]
     if "mobi" in args.output_format and "epub" not in args.output_format:
@@ -112,6 +116,7 @@ async def async_main():
                     force_login=args.force_login,
                     use_default_profile=args.use_default_profile,
                     mock_user_agent=args.mock_user_agent,
+                    proxy_server=args.proxy_server
                 )
             except RuntimeError:
                 logging.exception("Launch book %s home page failed" % book_id)
