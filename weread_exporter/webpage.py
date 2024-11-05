@@ -6,8 +6,10 @@ import asyncio
 import json
 import logging
 import os
+import random
 import sys
 import time
+import urllib.parse
 
 import pyppeteer
 
@@ -20,10 +22,13 @@ class WeReadWebPage(object):
     root_url = "https://weread.qq.com"
     window_size = (1920, 1080)
 
-    def __init__(self, book_id, cookie_path=None):
+    def __init__(self, book_id, cookie_path=None, webcache_path=None):
         self._book_id = book_id
         self._cookie_path = cookie_path
         self._cookie = {}
+        self._webcache_path = webcache_path or "cache"
+        if not os.path.isdir(self._webcache_path):
+            os.makedirs(self._webcache_path)
         self._home_url = "%s/web/bookDetail/%s" % (
             self.__class__.root_url,
             book_id,
@@ -72,7 +77,7 @@ class WeReadWebPage(object):
         rsp = await utils.fetch(url, headers=headers)
         rsp = json.loads(rsp.decode())
         if rsp.get("errCode") == -2012:
-            rsp_headers, _ = await utils.fetch(
+            _, rsp_headers, _ = await utils.fetch(
                 self.__class__.root_url, headers=headers, respond_with_headers=True
             )
             for it in rsp_headers.getall("Set-Cookie", []):
@@ -124,8 +129,10 @@ class WeReadWebPage(object):
         with open(self._cookie_path, "w") as fp:
             fp.write(json.dumps(self._cookie))
 
-    def _format_cookie(self):
+    def _format_cookie(self, cookie=""):
         cookies = []
+        if cookie:
+            cookies.append(cookie)
         for key in self._cookie:
             cookies.append("%s=%s" % (key, self._cookie[key]))
         return "; ".join(cookies)
@@ -169,48 +176,95 @@ class WeReadWebPage(object):
             % command
         )
 
-    async def launch(self, headless=False, force_login=False):
+    async def launch(
+        self,
+        headless=False,
+        force_login=False,
+        use_default_profile=False,
+        mock_user_agent=False,
+        proxy_server=None
+    ):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
         chrome = self._check_chrome()
+        args = ["--no-first-run", "--remote-allow-origins=*"]
+        if headless:
+            args.append("--headless")
+            if sys.platform == "linux" and os.getuid() == 0:
+                args.append("--no-sandbox")
+        if use_default_profile:
+            args.append("--user-data-dir")
+        else:
+            args.append("--window-size=%d,%d" % self.__class__.window_size)
+        if mock_user_agent:
+            args.append('--user-agent="%s"' % utils.generate_user_agent())
+        if proxy_server:
+            args.append("--proxy-server=%s" % proxy_server)
+        args.append("about:blank")
+        logging.info(
+            "[%s] Chrome args: chrome %s" % (self.__class__.__name__, " ".join(args))
+        )
         self._browser = await pyppeteer.launch(
-            headless=headless,
             executablePath=chrome,
-            args=[
-                "--window-size=%d,%d" % self.__class__.window_size,
-            ],
+            ignoreDefaultArgs=True,
+            args=args,
+            defaultViewport=None,
+            logLevel=logging.INFO,
         )
         self._page = (await self._browser.pages())[0]
-        await self._page.evaluateOnNewDocument("""() => {
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => {
-                    console.log('navigator.webdriver is called');
-                    console.trace();
-                    return undefined;
-                }
-            });
-
-            var _hasOwnProperty = Object.prototype.hasOwnProperty;
-            Object.prototype.hasOwnProperty = function (key) {
-                if (key === 'webdriver') {
-                    console.log('hasOwnProperty', key, 'is called');
-                    console.trace();
-                    return false;
-                }
-                return _hasOwnProperty.call(this, key);
+        await self._page.evaluateOnNewDocument(
+            """() => {
+            if (navigator.webdriver) {
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => {
+                        console.log('navigator.webdriver is called');
+                        console.trace();
+                        return undefined;
+                    }
+                });
+                var _hasOwnProperty = Object.prototype.hasOwnProperty;
+                Object.prototype.hasOwnProperty = function (key) {
+                    if (key === 'webdriver') {
+                        console.log('hasOwnProperty', key, 'is called');
+                        console.trace();
+                        return false;
+                    }
+                    return _hasOwnProperty.call(this, key);
+                };
+                const originalQuery = navigator.permissions.query;
+                navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+            }
+            if (navigator.plugins.length === 0) {
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+                Object.defineProperty(window, 'PluginArray', {
+                    get: () => Array,
+                });
+            }
+            if (navigator.languages.length === 0) {
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en'],
+                });
+            }
+            window.chrome = window.chrome || {
+                runtime: {},
             };
         }
-        """)
-
-        await self._page.goto(self._home_url)
+        """
+        )
 
         await self._page.setViewport(
             {
-                "width": self.__class__.window_size[0],
-                "height": self.__class__.window_size[1],
+                "width": 0,
+                "height": 0,
                 "deviceScaleFactor": 0.3,
             }
         )
-        if self._cookie:
+        if self._cookie.get("wr_vid"):
             try:
                 user_info = await self.get_user_info()
             except utils.InvalidUserError as ex:
@@ -221,9 +275,10 @@ class WeReadWebPage(object):
             else:
                 logging.info(
                     "[%s] Current login user is %s"
-                    % (self.__class__.__name__, user_info["name"])
+                    % (self.__class__.__name__, user_info.get("name", "Anonymous"))
                 )
-                await self._inject_cookie()
+        if self._cookie:
+            await self._inject_cookie()
 
         await self._page.goto(self._home_url)
         # await self.wait_for_selector("div.readerFooter a")
@@ -281,18 +336,6 @@ class WeReadWebPage(object):
         else:
             raise RuntimeError("Wait for avatar timeout")
 
-    async def inject_cookie(self):
-        if not self._cookie:
-            return
-        for it in self._cookie.split(";"):
-            it = it.strip()
-            if not it:
-                continue
-            key, value = it.split("=", 1)
-            await self._page.setCookie(
-                {"url": self.__class__.root_url, "name": key, "value": value}
-            )
-
     async def _inject_cookie(self):
         for key in self._cookie:
             logging.info(
@@ -304,6 +347,7 @@ class WeReadWebPage(object):
                     "url": self.__class__.root_url,
                     "name": key,
                     "value": self._cookie[key],
+                    "secure": True,
                 }
             )
 
@@ -339,41 +383,166 @@ class WeReadWebPage(object):
                 raise RuntimeError("Login timeout")
         return False
 
+    async def _get_from_cache_or_server(self, url, headers=None):
+        u = urllib.parse.urlparse(url)
+        path = os.path.join(
+            self._webcache_path, "resources", u.path[1:].replace("/", os.sep)
+        )
+        if os.path.isfile(path):
+            with open(path, "rb") as fp:
+                return 200, {}, fp.read()
+
+        dirpath = os.path.dirname(path)
+        if not os.path.isdir(dirpath):
+            os.makedirs(dirpath)
+        status, headers, body = await utils.fetch(
+            url, headers=headers, respond_with_headers=True
+        )
+        if status == 200:
+            with open(path, "wb") as fp:
+                fp.write(body)
+        return status, headers, body
+
+    def _handle_request_headers(self, url, headers):
+        for key in ("baggage", "sentry-trace"):
+            headers.pop(key, None)
+        cookie = ""
+        if "/web/reader/" in url:
+            cookie = "wr_useHorizonReader=0"
+        headers["cookie"] = self._format_cookie(cookie)
+        return headers
+
+    def _handle_response_headers(self, url, headers):
+        if "oss.weread.qq.com" in url:
+            headers["Access-Control-Allow-Origin"] = "*"
+            headers["Access-Control-Request-Method"] = "*"
+            headers["Access-Control-Allow-Headers"] = "*"
+        return headers
+
+    def _handle_http_body(self, url, body):
+        if url.startswith(self._chapter_root_url):
+            inject_script = (
+                "<script src='https://cdn.weread.qq.com/web/1.392ec47a.js'></script>\n"
+            )
+            return body.replace(b"</head>", inject_script.encode() + b"</head>")
+        return body
+
     async def _handle_request(self, request):
-        logging.info("[%s] Fetch url %s" % (self.__class__.__name__, request.url))
-        if request.url.startswith(self._chapter_root_url):
-            # await request.continue_()
-            headers = request.headers
-            headers["Cookie"] = self._format_cookie()
-            body = await utils.fetch(request.url, headers=headers)
+        if request.url.startswith("chrome-extension://"):
+            return await request.continue_()
+
+        if "/web/1.392ec47a.js" in request.url:
             with open(
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook.js")
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook.js"),
+                "rb",
             ) as fp:
                 hook_script = fp.read()
-            inject_script = "<script>\n%s</script>\n" % hook_script
-            body = body.replace(b'"useHorizonReader":1', b'"useHorizonReader":0')
-            body = body.replace(b'"soldout":1', b'"soldout":0')
-            response = {"body": inject_script.encode() + body}
-            await request.respond(response)
-        elif "/app." in request.url and request.url.endswith(".js"):
-            self._page.remove_listener("request", self.handle_request)
-            await self._page.setRequestInterception(False)
-            body = await utils.fetch(request.url, headers=request.headers)
-            pos = body.find(b"'isCopyRightForbiddenRead':function")
-            if pos < 0:
-                logging.warning(
-                    "[%s] Lookup isCopyRightForbiddenRead failed"
-                    % self.__class__.__name__
-                )
-                await request.continue_()
-                return
-            pos = body.find(b"{", pos)
-            pos1 = body.find(b"}", pos)
-            body = body[: pos + 1] + b"return false;" + body[pos1:]
-            response = {"body": body}
-            await request.respond(response)
+                response = {
+                    "status": 200,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": hook_script,
+                }
+                return await request.respond(response)
+
+        urlobj = urllib.parse.urlparse(request.url)
+        is_resource_file = urlobj.path.endswith(
+            (".js", ".css", ".jpg", ".png", ".gif", ".svg")
+        )
+        status = 200
+        headers = {
+            "Server": "nginx/1.20.2",
+        }
+        body = b""
+        if request.method == "OPTIONS":
+            headers = {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Request-Method": "*",
+                "Access-Control-Allow-Headers": "*",
+            }
+        elif request.method == "GET" and is_resource_file:
+            status, headers, body = await self._get_from_cache_or_server(request.url)
+        elif "/web/book/read" in request.url:
+            body = b'{"succ":1,"synckey":%d}' % random.randint(10000000, 100000000)
+            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers["Content-Length"] = str(len(body))
+            logging.info(
+                "[%s][%s] Url %s return mock data"
+                % (self.__class__.__name__, request.method, request.url)
+            )
+        elif "sentry_key=" in request.url:
+            status = 200
+            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers["Content-Length"] = str(len(body))
+            body = b"{}"
+            logging.info(
+                "[%s][%s] Url %s return mock data"
+                % (self.__class__.__name__, request.method, request.url)
+            )
+        elif "/hera/logkv" in request.url or "/hera/osslog" in request.url:
+            status = 204
+        elif "/hera/chlog" in request.url:
+            body = b'{"ret":0}'
+            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers["Content-Length"] = str(len(body))
+            logging.info(
+                "[%s][%s] Url %s return mock data"
+                % (self.__class__.__name__, request.method, request.url)
+            )
+        elif "hijack_csp_report" in request.url:
+            return
+        elif "/river/single" in request.url:
+            body = b'{"err_code":0,"msg":"suc"}'
+            headers["Content-Type"] = "application/json; charset=utf-8"
+            headers["Content-Length"] = len(body)
+            logging.info(
+                "[%s][%s] Url %s return mock data"
+                % (self.__class__.__name__, request.method, request.url)
+            )
         else:
-            await request.continue_()
+            logging.info(
+                "[%s][%s] Fetch url %s"
+                % (self.__class__.__name__, request.method, request.url)
+            )
+            headers = self._handle_request_headers(request.url, request.headers)
+            time0 = time.time()
+            status, headers, body = await utils.fetch(
+                request.url,
+                method=request.method,
+                headers=headers,
+                data=request.postData,
+                respond_with_headers=True,
+            )
+            headers = dict(headers)
+            logging.info(
+                "[%s][%s][%.2f] Url %s return %d, body len is %d"
+                % (
+                    self.__class__.__name__,
+                    request.method,
+                    time.time() - time0,
+                    request.url,
+                    status,
+                    len(body),
+                )
+            )
+            if "Content-Security-Policy" in headers:
+                logging.info(
+                    "[%s][%s] Url %s has Content-Security-Policy: %s"
+                    % (
+                        self.__class__.__name__,
+                        request.method,
+                        request.url,
+                        headers["Content-Security-Policy"],
+                    )
+                )
+                headers.pop("Content-Security-Policy")
+
+        headers = self._handle_response_headers(request.url, headers)
+        response = {
+            "status": status,
+            "headers": headers,
+            "body": self._handle_http_body(request.url, body),
+        }
+        return await request.respond(response)
 
     def handle_request(self, request):
         asyncio.ensure_future(self._handle_request(request))
@@ -381,12 +550,6 @@ class WeReadWebPage(object):
     async def pre_load_page(self):
         await self._page.setRequestInterception(True)
         self._page.on("request", self.handle_request)
-
-    async def start_read(self):
-        await self.pre_load_page()
-        self._url = self._chapter_root_url + self._book_id
-        await self._page.goto(self._url, timeout=60000)
-        await self._page.waitForSelector("button.readerFooter_button", timeout=60000)
 
     async def get_markdown(self):
         script = "canvasContextHandler.data.complete;"
@@ -439,7 +602,7 @@ class WeReadWebPage(object):
             utils.wr_hash(str(chapter_id)),
         )
 
-    async def goto_chapter(self, chapter_id, timeout=60):
+    async def goto_chapter(self, chapter_id, timeout=120):
         logging.info("[%s] Go to chapter %s" % (self.__class__.__name__, chapter_id))
         # await self.clear_cache()
         await self.pre_load_page()

@@ -3,7 +3,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 
 
 def patch_windows():
@@ -11,6 +10,18 @@ def patch_windows():
     os.environ["PATH"] += ";" + bin_path
     if hasattr(os, "add_dll_directory"):
         os.add_dll_directory(bin_path)
+
+
+def patch_generateRequestHash():
+    from pyppeteer import network_manager
+
+    orig_generateRequestHash = network_manager.generateRequestHash
+
+    def patched_generateRequestHash(request):
+        request["headers"].pop("Origin", None)
+        return orig_generateRequestHash(request)
+
+    network_manager.generateRequestHash = patched_generateRequestHash
 
 
 async def async_main():
@@ -31,13 +42,13 @@ async def async_main():
         "--load-timeout",
         help="load chapter page timeout",
         type=int,
-        default=30,
+        default=60,
     )
     parser.add_argument(
         "--load-interval",
         help="load chapter page interval time",
         type=int,
-        default=10,
+        default=30,
     )
     parser.add_argument(
         "--css-file",
@@ -48,6 +59,22 @@ async def async_main():
     )
     parser.add_argument(
         "--force-login", help="force login first", action="store_true", default=False
+    )
+    parser.add_argument(
+        "--use-default-profile",
+        help="use default profile",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--mock-user-agent",
+        help="use mock user-agent",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--proxy-server",
+        help="http proxy server, e.g. http://127.0.0.1:8888",
     )
     args = parser.parse_args()
     args.output_format = args.output_format or ["epub"]
@@ -70,7 +97,9 @@ async def async_main():
     for book_id in book_list:
         logging.info("Exporting book %s" % book_id)
         page = webpage.WeReadWebPage(
-            book_id, cookie_path=os.path.join("cache", "cookie.txt")
+            book_id,
+            cookie_path=os.path.join("cache", "cookie.txt"),
+            webcache_path="cache",
         )
         if not await page.check_valid():
             logging.warning("Book %s status is invalid, stop exporting" % book_id)
@@ -82,10 +111,16 @@ async def async_main():
         exporter = export.WeReadExporter(page, save_path)
         while True:
             try:
-                await page.launch(headless=args.headless, force_login=args.force_login)
+                await page.launch(
+                    headless=args.headless,
+                    force_login=args.force_login,
+                    use_default_profile=args.use_default_profile,
+                    mock_user_agent=args.mock_user_agent,
+                    proxy_server=args.proxy_server
+                )
             except RuntimeError:
                 logging.exception("Launch book %s home page failed" % book_id)
-                time.sleep(2)
+                await asyncio.sleep(2)
                 continue
 
             try:
@@ -143,6 +178,7 @@ async def async_main():
 def main():
     if sys.platform == "win32":
         patch_windows()
+    patch_generateRequestHash()
     logging.root.level = logging.INFO
     handler = logging.StreamHandler()
     fmt = "[%(asctime)s][%(levelname)s]%(message)s"
@@ -151,7 +187,13 @@ def main():
     logging.root.addHandler(handler)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(async_main())
+    try:
+        loop.run_until_complete(async_main())
+    except:
+        import traceback
+
+        traceback.print_exc()
+        return
 
 
 if __name__ == "__main__":

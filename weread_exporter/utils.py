@@ -23,23 +23,25 @@ class InvalidUserError(RuntimeError):
 
 def generate_user_agent():
     user_agent_tmpl = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%d.0.0.0 Safari/537.36"
-    return user_agent_tmpl % random.randint(90, 120)
+    return user_agent_tmpl % random.randint(90, 130)
 
 
-async def fetch(url, headers=None, respond_with_headers=False):
+async def fetch(url, method="GET", headers=None, data=None, respond_with_headers=False):
     headers = headers or {}
-    if "User-Agent" not in headers:
-        headers[
-            "User-Agent"
-        ] = generate_user_agent()
+    headers.pop("sec-ch-ua", None)
+    headers.pop("sec-ch-ua-platform", None)
     async with aiohttp.ClientSession() as session:
+        method = getattr(session, method.lower())
+        if data and not isinstance(data, bytes):
+            data = data.encode("utf-8")
+
         for _ in range(3):
             try:
-                async with session.get(url, headers=headers) as response:
-                    response.raise_for_status()
+                async with method(url, headers=headers, data=data) as response:
+                    #response.raise_for_status()
                     result = await response.read()
                     if respond_with_headers:
-                        return response.headers, result
+                        return response.status, response.headers, result
                     else:
                         return result
             except:

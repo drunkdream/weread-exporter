@@ -300,14 +300,13 @@ class WeReadExporter(object):
         with open(self._cover_image_path, "wb") as fp:
             fp.write(data)
 
-    async def export_markdown(self, timeout=30, interval=10):
+    async def export_markdown(self, timeout=60, interval=30):
         if not os.path.isdir(self._chapter_dir):
             os.makedirs(self._chapter_dir)
         meta_data = await self._load_meta_data()
         if not os.path.isfile(self._cover_image_path):
             await self.save_cover_image()
 
-        min_wait_time = interval
         for index, chapter in enumerate(meta_data["chapters"]):
             logging.info(
                 "[%s] Check chapter %s/%s"
@@ -333,9 +332,15 @@ class WeReadExporter(object):
                         timeout=timeout + 60,
                     )  # avoid pyppeteer hangs
                 except asyncio.TimeoutError:
-                    raise utils.LoadChapterFailedError(
-                        "Load chapter %s timeout" % chapter["title"]
+                    logging.warning(
+                        "[%s] Load chapter %s timeout %ds"
+                        % (
+                            self.__class__.__name__,
+                            chapter["title"],
+                            time.time() - time0,
+                        )
                     )
+                    raise utils.LoadChapterFailedError()
                 except KeyboardInterrupt as ex:
                     raise ex
                 except:
@@ -358,6 +363,4 @@ class WeReadExporter(object):
             with open(file_path, "wb") as fp:
                 fp.write(markdown.encode("utf-8", errors="replace"))
 
-            wait_time = min_wait_time - (time.time() - time0)
-            if wait_time > 0:
-                await asyncio.sleep(wait_time)
+            await asyncio.sleep(interval)
