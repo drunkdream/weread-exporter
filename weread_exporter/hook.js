@@ -81,13 +81,18 @@ let canvasContextHandler = {
         break;
       }
     }
-
+    
+    let is_over = true;
+    let is_catch = false;
     for (let img of this.data.imgList) {
       if (img[1] > start_y && img[1] < end_y) {
         this.ensureHighlightClosed();
         this.data.markdown += "\n\n![](" + img[2] + ")\n";
-        break;
+        is_over = false;
+        is_catch = true;
       }
+      if (is_catch && is_over) break;
+      is_over =true;
     }
 
     for (let hr of this.data.hrList) {
@@ -192,6 +197,7 @@ let canvasContextHandler = {
                 for (let i = that.data.imgList.length; i < imgList.length; i++) {
                   that.data.markdown += "\n\n![](" + imgList[i][2] + ")\n";
                 }
+                that.data.imgList.length = imgList.length;
               }
               that.data.complete = true;
             }, 1000);
