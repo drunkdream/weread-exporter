@@ -121,6 +121,15 @@ class WeReadExporter(object):
             with open(chapter_path, "wb") as fp:
                 fp.write(output.encode())
 
+    async def markdown_to_txt(self, save_path):
+        meta_data = await self._load_meta_data()
+        for index, chapter in enumerate(meta_data["chapters"]):
+            chapter_path = self._make_chapter_path(index, chapter["id"])
+            raw_html = self._markdown_to_html(chapter_path, wrap=False)
+            soup = bs4.BeautifulSoup(raw_html, features="html.parser")
+            with open(save_path, "a+") as fp:
+                fp.write(soup.text + "\n\n")
+
     def _markdown_to_html(self, path_or_text, wrap=True):
         if os.path.isfile(path_or_text):
             with open(path_or_text, "rb") as fp:

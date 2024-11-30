@@ -36,7 +36,7 @@ async def async_main():
         "--output-format",
         help="output file format",
         action="append",
-        choices=["md", "epub", "pdf", "mobi"],
+        choices=["md", "epub", "pdf", "mobi", "txt"],
     )
     parser.add_argument(
         "--load-timeout",
@@ -116,7 +116,7 @@ async def async_main():
                     force_login=args.force_login,
                     use_default_profile=args.use_default_profile,
                     mock_user_agent=args.mock_user_agent,
-                    proxy_server=args.proxy_server
+                    proxy_server=args.proxy_server,
                 )
             except RuntimeError:
                 logging.exception("Launch book %s home page failed" % book_id)
@@ -171,6 +171,14 @@ async def async_main():
                 if not os.path.isfile(save_path):
                     logging.warning("Create mobi file failed")
                     continue
+                logging.info("Save file %s complete" % save_path)
+
+        if "txt" in args.output_format:
+            save_path = os.path.join(output_dir, "%s.txt" % title)
+            if os.path.isfile(save_path):
+                logging.info("File %s exist, ignore export" % save_path)
+            else:
+                await exporter.markdown_to_txt(save_path)
                 logging.info("Save file %s complete" % save_path)
     return 0
 
