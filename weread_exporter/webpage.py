@@ -22,13 +22,13 @@ class WeReadWebPage(object):
     root_url = "https://weread.qq.com"
     window_size = (1920, 1080)
 
-    def __init__(self, book_id, cookie_path=None, webcache_path=None):
+    def __init__(self, book_id, webcache_path=None, profile_path=None):
         self._book_id = book_id
-        self._cookie_path = cookie_path
         self._cookie = {}
         self._webcache_path = webcache_path or "cache"
         if not os.path.isdir(self._webcache_path):
             os.makedirs(self._webcache_path)
+        self._profile_path = profile_path or os.path.join(self._webcache_path, "chrome_profile")
         self._home_url = "%s/web/bookDetail/%s" % (
             self.__class__.root_url,
             book_id,
@@ -36,7 +36,6 @@ class WeReadWebPage(object):
         self._chapter_root_url = self.__class__.root_url + "/web/reader/"
         self._browser = None
         self._page = None
-        self._load_cookie()
         self._url = ""
 
     async def get_book_info(self):
@@ -93,7 +92,6 @@ class WeReadWebPage(object):
                 logging.info(
                     "[%s] Update cookie %s" % (self.__class__.__name__, cookie)
                 )
-            self._save_cookie()
             headers["Cookie"] = self._format_cookie()
             rsp = await utils.fetch(url, headers=headers)
             rsp = json.loads(rsp.decode())
@@ -103,31 +101,6 @@ class WeReadWebPage(object):
         elif rsp.get("errCode"):
             raise RuntimeError("Get user info failed: %s" % rsp)
         return rsp
-
-    def _load_cookie(self):
-        self._cookie = {}
-        if not os.path.isfile(self._cookie_path):
-            return
-        with open(self._cookie_path) as fp:
-            cookie = fp.read()
-            try:
-                cookie = json.loads(cookie)
-            except:
-                for it in cookie.split(";"):
-                    it = it.strip()
-                    if "=" not in it:
-                        continue
-                    key, value = it.split("=")
-                    self._cookie[key] = value
-            else:
-                for key in cookie:
-                    self._cookie[key] = cookie[key]
-
-    def _save_cookie(self):
-        if not self._cookie_path:
-            return
-        with open(self._cookie_path, "w") as fp:
-            fp.write(json.dumps(self._cookie))
 
     def _format_cookie(self, cookie=""):
         cookies = []
@@ -152,6 +125,11 @@ class WeReadWebPage(object):
         if b'"soldout":1' in html:
             return False
         return True
+
+    def has_profile(self):
+        """Check if Chrome profile exists (indicates previous login attempt)."""
+        cookies_db = os.path.join(self._profile_path, "Default", "Cookies")
+        return os.path.isfile(cookies_db)
 
     def _check_chrome(self):
         path_list = os.environ["PATH"].split(";" if sys.platform == "win32" else ":")
@@ -180,7 +158,6 @@ class WeReadWebPage(object):
         self,
         headless=False,
         force_login=False,
-        use_default_profile=False,
         mock_user_agent=False,
         proxy_server=None
     ):
@@ -191,9 +168,8 @@ class WeReadWebPage(object):
             args.append("--headless")
             if sys.platform == "linux" and os.getuid() == 0:
                 args.append("--no-sandbox")
-        if use_default_profile:
-            args.append("--user-data-dir")
-        else:
+        args.append("--user-data-dir=%s" % self._profile_path)
+        if not headless:
             args.append("--window-size=%d,%d" % self.__class__.window_size)
         if mock_user_agent:
             args.append('--user-agent="%s"' % utils.generate_user_agent())
@@ -259,34 +235,40 @@ class WeReadWebPage(object):
 
         await self._page.setViewport(
             {
-                "width": 0,
-                "height": 0,
-                "deviceScaleFactor": 0.3,
+                "width": 1920,
+                "height": 1080,
+                "deviceScaleFactor": 1,
             }
         )
+
+        # Navigate to page - Chrome profile handles cookies automatically
+        await self._page.goto(self._home_url)
+
+        # Read cookies from browser after navigation
+        await self._update_cookie()
+
+        # Check if logged in
+        is_logged_in = False
         if self._cookie.get("wr_vid"):
             try:
                 user_info = await self.get_user_info()
+                logging.info(
+                    "[%s] Current login user is %s"
+                    % (self.__class__.__name__, user_info.get("name", "Anonymous"))
+                )
+                is_logged_in = True
             except utils.InvalidUserError as ex:
                 logging.warning(
                     "[%s] Get user error: %s" % (self.__class__.__name__, ex)
                 )
                 self._cookie = {}
-            else:
-                logging.info(
-                    "[%s] Current login user is %s"
-                    % (self.__class__.__name__, user_info.get("name", "Anonymous"))
-                )
-        if self._cookie:
-            await self._inject_cookie()
 
-        await self._page.goto(self._home_url)
-        # await self.wait_for_selector("div.readerFooter a")
-        if force_login:
+        if force_login and not is_logged_in:
             await self.login()
-        if self._cookie:
-            await self.wait_for_avatar()
+            is_logged_in = True
+
         self._page.on("console", self.handle_log)
+        return is_logged_in
 
     async def close(self):
         if self._browser:
@@ -336,21 +318,6 @@ class WeReadWebPage(object):
         else:
             raise RuntimeError("Wait for avatar timeout")
 
-    async def _inject_cookie(self):
-        for key in self._cookie:
-            logging.info(
-                "[%s] Inject cookie %s=%s"
-                % (self.__class__.__name__, key, self._cookie[key])
-            )
-            await self._page.setCookie(
-                {
-                    "url": self.__class__.root_url,
-                    "name": key,
-                    "value": self._cookie[key],
-                    "secure": True,
-                }
-            )
-
     async def login(self):
         selectors = [
             "button.navBar_link_Login",
@@ -377,7 +344,6 @@ class WeReadWebPage(object):
                     continue
                 logging.info("[%s] Login success" % self.__class__.__name__)
                 await self._update_cookie()
-                self._save_cookie()
                 return True
             else:
                 raise RuntimeError("Login timeout")
@@ -551,20 +517,29 @@ class WeReadWebPage(object):
         await self._page.setRequestInterception(True)
         self._page.on("request", self.handle_request)
 
-    async def get_markdown(self):
+    async def get_markdown(self, timeout=30):
         script = "canvasContextHandler.data.complete;"
         time0 = time.time()
-        while time.time() - time0 < 10:
+        while time.time() - time0 < timeout:
             result = await self._page.evaluate(script)
             if result:
                 break
             await asyncio.sleep(1)
+        else:
+            logging.warning("[%s] Timeout waiting for canvasContextHandler.data.complete" % self.__class__.__name__)
+
         script = "canvasContextHandler.data.markdown;"
         result = await self._page.evaluate(script)
         if not result:
+            logging.info("[%s] Trying updateMarkdown fallback" % self.__class__.__name__)
             await self._page.evaluate("canvasContextHandler.updateMarkdown();")
+            await asyncio.sleep(2)
             result = await self._page.evaluate(script)
             if not result:
+                # Check if canvasContextHandler exists
+                exists = await self._page.evaluate("typeof canvasContextHandler !== 'undefined';")
+                if not exists:
+                    raise RuntimeError("canvasContextHandler not found - hook.js may not be loaded")
                 raise RuntimeError("Wait for creating markdown timeout")
         return result
 
@@ -575,7 +550,13 @@ class WeReadWebPage(object):
                     "button.readerFooter_button", timeout=60000
                 )
             except pyppeteer.errors.TimeoutError:
-                logging.info("[%s] load selector timeout " % self.__class__.__name__)
+                logging.warning("[%s] Footer button selector timeout - page may not have loaded correctly" % self.__class__.__name__)
+                # Check if canvasContextHandler has any data
+                has_data = await self._page.evaluate(
+                    "typeof canvasContextHandler !== 'undefined' && canvasContextHandler.data.markdown.length > 0;"
+                )
+                if has_data:
+                    logging.info("[%s] canvasContextHandler has data, continuing" % self.__class__.__name__)
                 break
             result = await self._page.evaluate(
                 "document.getElementsByClassName('readerFooter_button')[0].innerText;"

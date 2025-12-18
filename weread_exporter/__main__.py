@@ -61,12 +61,6 @@ async def async_main():
         "--force-login", help="force login first", action="store_true", default=False
     )
     parser.add_argument(
-        "--use-default-profile",
-        help="use default profile",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
         "--mock-user-agent",
         help="use mock user-agent",
         action="store_true",
@@ -98,7 +92,6 @@ async def async_main():
         logging.info("Exporting book %s" % book_id)
         page = webpage.WeReadWebPage(
             book_id,
-            cookie_path=os.path.join("cache", "cookie.txt"),
             webcache_path="cache",
         )
         if not await page.check_valid():
@@ -110,11 +103,22 @@ async def async_main():
             os.mkdir(output_dir)
         exporter = export.WeReadExporter(page, save_path)
         while True:
+            # Determine headless mode based on profile existence
+            if args.headless:
+                # User explicitly requested headless mode
+                headless = True
+            else:
+                # Auto-detect: use headless if profile exists (likely logged in)
+                headless = page.has_profile()
+                if headless:
+                    logging.info("Profile exists, trying headless mode")
+                else:
+                    logging.info("No profile, running in headed mode for login")
+
             try:
-                await page.launch(
-                    headless=args.headless,
-                    force_login=args.force_login,
-                    use_default_profile=args.use_default_profile,
+                is_logged_in = await page.launch(
+                    headless=headless,
+                    force_login=False,
                     mock_user_agent=args.mock_user_agent,
                     proxy_server=args.proxy_server,
                 )
@@ -122,6 +126,17 @@ async def async_main():
                 logging.exception("Launch book %s home page failed" % book_id)
                 await asyncio.sleep(2)
                 continue
+
+            # If not logged in and was headless, relaunch in headed mode for login
+            if not is_logged_in and headless and not args.headless:
+                logging.info("Not logged in, relaunching in headed mode for login")
+                await page.close()
+                is_logged_in = await page.launch(
+                    headless=False,
+                    force_login=True,
+                    mock_user_agent=args.mock_user_agent,
+                    proxy_server=args.proxy_server,
+                )
 
             try:
                 await exporter.export_markdown(args.load_timeout, args.load_interval)
