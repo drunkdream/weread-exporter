@@ -13,6 +13,7 @@ import urllib.parse
 
 import pyppeteer
 
+from . import webproxy
 from . import utils
 
 
@@ -34,10 +35,14 @@ class WeReadWebPage(object):
             book_id,
         )
         self._chapter_root_url = self.__class__.root_url + "/web/reader/"
+        self._hook_script_name = "1.%s.js" % "".join(
+            [random.choice("0123456789abcdef") for _ in range(8)]
+        )
         self._browser = None
         self._page = None
         self._load_cookie()
         self._url = ""
+        self._proxy_installed = False
 
     async def get_book_info(self):
         html = (await utils.fetch(self._home_url)).decode()
@@ -182,7 +187,7 @@ class WeReadWebPage(object):
         force_login=False,
         use_default_profile=False,
         mock_user_agent=False,
-        proxy_server=None
+        proxy_server=None,
     ):
         logging.info("[%s] Launch url %s" % (self.__class__.__name__, self._home_url))
         chrome = self._check_chrome()
@@ -389,6 +394,10 @@ class WeReadWebPage(object):
             self._webcache_path, "resources", u.path[1:].replace("/", os.sep)
         )
         if os.path.isfile(path):
+            logging.info(
+                "[%s] Url %s hit cache %d"
+                % (self.__class__.__name__, url, os.path.getsize(path))
+            )
             with open(path, "rb") as fp:
                 return 200, {}, fp.read()
 
@@ -398,158 +407,133 @@ class WeReadWebPage(object):
         status, headers, body = await utils.fetch(
             url, headers=headers, respond_with_headers=True
         )
+        logging.info("[%s] Url %s return %d" % (self.__class__.__name__, url, status))
         if status == 200:
             with open(path, "wb") as fp:
                 fp.write(body)
         return status, headers, body
 
-    def _handle_request_headers(self, url, headers):
-        for key in ("baggage", "sentry-trace"):
-            headers.pop(key, None)
-        cookie = ""
-        if "/web/reader/" in url:
-            cookie = "wr_useHorizonReader=0"
-        headers["cookie"] = self._format_cookie(cookie)
-        return headers
-
-    def _handle_response_headers(self, url, headers):
-        if "oss.weread.qq.com" in url:
-            headers["Access-Control-Allow-Origin"] = "*"
-            headers["Access-Control-Request-Method"] = "*"
-            headers["Access-Control-Allow-Headers"] = "*"
-        return headers
-
-    def _handle_http_body(self, url, body):
-        if url.startswith(self._chapter_root_url):
-            inject_script = (
-                "<script src='https://cdn.weread.qq.com/web/1.392ec47a.js'></script>\n"
+    def _log_request(self, request):
+        if request.method == "POST":
+            message = "[%s] %s %s" % (
+                self.__class__.__name__,
+                request.method,
+                request.url,
             )
-            return body.replace(b"</head>", inject_script.encode() + b"</head>")
-        return body
+            if request.body:
+                message += " %s" % request.content
+            logging.info(message)
 
-    async def _handle_request(self, request):
-        if request.url.startswith("chrome-extension://"):
-            return await request.continue_()
+    def on_document_request(self, request):
+        """ """
+        cookie = request.headers.get("cookie", "")
+        cookie += "; wr_useHorizonReader=0"
+        request.headers["cookie"] = cookie
+        return {"type": webproxy.EnumProxyType.Continue, "headers": request.headers}
 
-        if "/web/1.392ec47a.js" in request.url:
-            with open(
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook.js"),
-                "rb",
-            ) as fp:
-                hook_script = fp.read()
-                response = {
-                    "status": 200,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": hook_script,
-                }
-                return await request.respond(response)
-
-        urlobj = urllib.parse.urlparse(request.url)
-        is_resource_file = urlobj.path.endswith(
-            (".js", ".css", ".jpg", ".png", ".gif", ".svg")
+    def on_document_response(self, response):
+        content = response.content
+        inject_script = (
+            "<script src='https://cdn.weread.qq.com/web/%s'></script>\n" % self._hook_script_name
         )
-        status = 200
-        headers = {
-            "Server": "nginx/1.20.2",
+        content = content.replace("</head>", inject_script + "</head>")
+        return {
+            "status": response.status,
+            "headers": response.headers,
+            "body": content.encode("utf-8"),
         }
-        body = b""
+
+    def on_hook_script_request(self, request):
+        with open(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook.js"),
+            "rb",
+        ) as fp:
+            hook_script = fp.read()
+            return {
+                "type": webproxy.EnumProxyType.Mock,
+                "status": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": hook_script,
+            }
+
+    def on_log_request(self, request):
+        self._log_request(request)
+        headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Request-Method": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
         if request.method == "OPTIONS":
-            headers = {
+            return {
+                "type": webproxy.EnumProxyType.Mock,
+                "status": 200,
+                "headers": headers,
+            }
+        if "/hera/logkv" in request.url or "/hera/osslog" in request.url:
+            return {
+                "type": webproxy.EnumProxyType.Mock,
+                "status": 204,
+                "headers": headers,
+            }
+        elif "chlog" in request.url:
+            return {
+                "type": webproxy.EnumProxyType.Mock,
+                "status": 200,
+                "headers": headers,
+            }
+        return {"type": webproxy.EnumProxyType.Block}
+
+    def on_sentry_request(self, request):
+        self._log_request(request)
+        return {
+            "type": webproxy.EnumProxyType.Mock,
+            "status": 200,
+        }
+
+    def on_single_report_request(self, request):
+        self._log_request(request)
+        return {
+            "type": webproxy.EnumProxyType.Mock,
+            "status": 200,
+            "headers": {
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Request-Method": "*",
                 "Access-Control-Allow-Headers": "*",
-            }
-        elif request.method == "GET" and is_resource_file:
-            status, headers, body = await self._get_from_cache_or_server(request.url)
-        elif "/web/book/read" in request.url:
-            body = b'{"succ":1,"synckey":%d}' % random.randint(10000000, 100000000)
-            headers["Content-Type"] = "application/json; charset=utf-8"
-            headers["Content-Length"] = str(len(body))
-            logging.info(
-                "[%s][%s] Url %s return mock data"
-                % (self.__class__.__name__, request.method, request.url)
-            )
-        elif "sentry_key=" in request.url:
-            status = 200
-            headers["Content-Type"] = "application/json; charset=utf-8"
-            headers["Content-Length"] = str(len(body))
-            body = b"{}"
-            logging.info(
-                "[%s][%s] Url %s return mock data"
-                % (self.__class__.__name__, request.method, request.url)
-            )
-        elif "/hera/logkv" in request.url or "/hera/osslog" in request.url:
-            status = 204
-        elif "/hera/chlog" in request.url:
-            body = b'{"ret":0}'
-            headers["Content-Type"] = "application/json; charset=utf-8"
-            headers["Content-Length"] = str(len(body))
-            logging.info(
-                "[%s][%s] Url %s return mock data"
-                % (self.__class__.__name__, request.method, request.url)
-            )
-        elif "hijack_csp_report" in request.url:
-            return
-        elif "/river/single" in request.url:
-            body = b'{"err_code":0,"msg":"suc"}'
-            headers["Content-Type"] = "application/json; charset=utf-8"
-            headers["Content-Length"] = len(body)
-            logging.info(
-                "[%s][%s] Url %s return mock data"
-                % (self.__class__.__name__, request.method, request.url)
-            )
-        else:
-            logging.info(
-                "[%s][%s] Fetch url %s"
-                % (self.__class__.__name__, request.method, request.url)
-            )
-            headers = self._handle_request_headers(request.url, request.headers)
-            time0 = time.time()
-            status, headers, body = await utils.fetch(
-                request.url,
-                method=request.method,
-                headers=headers,
-                data=request.postData,
-                respond_with_headers=True,
-            )
-            headers = dict(headers)
-            logging.info(
-                "[%s][%s][%.2f] Url %s return %d, body len is %d"
-                % (
-                    self.__class__.__name__,
-                    request.method,
-                    time.time() - time0,
-                    request.url,
-                    status,
-                    len(body),
-                )
-            )
-            if "Content-Security-Policy" in headers:
-                logging.info(
-                    "[%s][%s] Url %s has Content-Security-Policy: %s"
-                    % (
-                        self.__class__.__name__,
-                        request.method,
-                        request.url,
-                        headers["Content-Security-Policy"],
-                    )
-                )
-                headers.pop("Content-Security-Policy")
-
-        headers = self._handle_response_headers(request.url, headers)
-        response = {
-            "status": status,
-            "headers": headers,
-            "body": self._handle_http_body(request.url, body),
+            },
+            "body": '{"err_code":0,"msg":"suc"}',
         }
-        return await request.respond(response)
 
-    def handle_request(self, request):
-        asyncio.ensure_future(self._handle_request(request))
+    def on_chapter_request(self, request):
+        return {"type": webproxy.EnumProxyType.Continue}
 
     async def pre_load_page(self):
-        await self._page.setRequestInterception(True)
-        self._page.on("request", self.handle_request)
+        if self._proxy_installed:
+            return
+        self._proxy_installed = True
+        # await self._page.setRequestInterception(True)
+        rules = [
+            webproxy.ProxyRule("*/hera/*", self.on_log_request),
+            webproxy.ProxyRule("*/sentry/*", self.on_sentry_request),
+            webproxy.ProxyRule("*/web/book/chapter/*", self.on_chapter_request),
+            webproxy.ProxyRule("*/river/single*", self.on_single_report_request),
+            webproxy.ProxyRule(
+                "*/web/reader/*", self.on_document_request, resource_type="Document"
+            ),
+            webproxy.ProxyRule(
+                "*/web/reader/*",
+                self.on_document_response,
+                resource_type="Document",
+                stage=webproxy.EnumProxyStage.Response,
+            ),
+            webproxy.ProxyRule(
+                "*/web/%s" % self._hook_script_name,
+                self.on_hook_script_request,
+                resource_type="Script",
+            ),
+        ]
+        proxy = webproxy.WebProxy(self._page, rules)
+        await proxy.setup_interception()
+        # self._page.on("request", self.handle_request)
 
     async def get_markdown(self):
         script = "canvasContextHandler.data.complete;"

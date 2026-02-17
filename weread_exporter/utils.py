@@ -38,7 +38,7 @@ async def fetch(url, method="GET", headers=None, data=None, respond_with_headers
         for _ in range(3):
             try:
                 async with method(url, headers=headers, data=data) as response:
-                    #response.raise_for_status()
+                    # response.raise_for_status()
                     result = await response.read()
                     if respond_with_headers:
                         return response.status, response.headers, result
