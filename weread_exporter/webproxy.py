@@ -6,49 +6,57 @@ import asyncio
 import json
 import logging
 import re
+import sys
 import traceback
+from typing import Dict, List, Optional, Tuple, Union, Any, Callable, Awaitable, cast
 
-import aiohttp
 import pyppeteer
+
+from . import utils
+
+if sys.version_info >= (3, 8):
+    from typing import Literal
+else:
+    from typing_extensions import Literal
 
 
 class EnumResourceType(object):
     """资源类型"""
 
-    Document = "Document"
-    Stylesheet = "Stylesheet"
-    Image = "Image"
-    Media = "Media"
-    Font = "Font"
-    Script = "Script"
-    TextTrack = "TextTrack"
-    XHR = "XHR"
-    Fetch = "Fetch"
-    Prefetch = "Prefetch"
-    EventSource = "EventSource"
-    WebSocket = "WebSocket"
-    Manifest = "Manifest"
-    SignedExchange = "SignedExchange"
-    Ping = "Ping"
-    CSPViolationReport = "CSPViolationReport"
-    Preflight = "Preflight"
-    FedCM = "FedCM"
-    Other = "Other"
+    Document: str = "Document"
+    Stylesheet: str = "Stylesheet"
+    Image: str = "Image"
+    Media: str = "Media"
+    Font: str = "Font"
+    Script: str = "Script"
+    TextTrack: str = "TextTrack"
+    XHR: str = "XHR"
+    Fetch: str = "Fetch"
+    Prefetch: str = "Prefetch"
+    EventSource: str = "EventSource"
+    WebSocket: str = "WebSocket"
+    Manifest: str = "Manifest"
+    SignedExchange: str = "SignedExchange"
+    Ping: str = "Ping"
+    CSPViolationReport: str = "CSPViolationReport"
+    Preflight: str = "Preflight"
+    FedCM: str = "FedCM"
+    Other: str = "Other"
 
 
 class EnumProxyStage(object):
     """代理阶段"""
 
-    Request = "request"
-    Response = "response"
+    Request: str = "request"
+    Response: str = "response"
 
 
 class EnumProxyType(object):
     """代理类型"""
 
-    Block = 1
-    Continue = 2
-    Mock = 3
+    Block: int = 1
+    Continue: int = 2
+    Mock: int = 3
 
 
 class ProxyRule(object):
@@ -58,13 +66,23 @@ class ProxyRule(object):
     """
 
     def __init__(
-        self, url_pattern, callback, resource_type=None, stage=None, methods=None
-    ):
+        self,
+        url_pattern: str,
+        callback: Callable[
+            [Union["WebRequest", "WebResponse"]],
+            Union[Dict[str, Any], Awaitable[Dict[str, Any]], None],
+        ],
+        resource_type: Optional[str] = None,
+        stage: Optional[str] = None,
+        methods: Optional[List[str]] = None,
+    ) -> None:
         """初始化代理规则
 
         Args:
             url_pattern: URL 匹配模式，支持通配符 *
+            callback: 回调函数
             resource_type: 资源类型，如 'Document', 'Script', 'Stylesheet', 'Image', 'XHR', 'Fetch', 'WebSocket' 等
+            stage: 代理阶段
             methods: HTTP 方法列表，如 ['GET', 'POST']，None 表示匹配所有方法
         """
         self._url_pattern = url_pattern
@@ -74,28 +92,22 @@ class ProxyRule(object):
         self._methods = methods or []
 
     @property
-    def stage(self):
+    def stage(self) -> str:
         """拦截阶段"""
         return self._stage
 
-    def matches(self, request):
+    def matches(self, request: pyppeteer.network_manager.Request) -> bool:
         """检查请求是否匹配此规则
 
         Args:
-            request: pyppeteer 的 Request 对象（用于匹配）或 WebRequest 对象
+            request: pyppeteer 的 Request 对象（用于匹配）
 
         Returns:
             bool: 是否匹配
         """
-        # 支持 pyppeteer Request 和 WebRequest 两种类型
-        if hasattr(request, "_url"):
-            # WebRequest 对象
-            url = request.url
-            method = request.method
-        else:
-            # pyppeteer Request 对象
-            url = request.url
-            method = request.method
+        # pyppeteer Request 对象
+        url: str = request.url
+        method: str = request.method
 
         # 检查 URL 模式
         if not self._match_url(url):
@@ -107,7 +119,7 @@ class ProxyRule(object):
 
         return True
 
-    def _match_url(self, url):
+    def _match_url(self, url: str) -> bool:
         """匹配 URL 模式
 
         支持 * 通配符，如 '*/web/book/read*' 或 '*/weread.qq.com/*'
@@ -127,7 +139,7 @@ class ProxyRule(object):
 
         return re.match(pattern, url) is not None
 
-    async def handle_request(self, request):
+    async def handle_request(self, request: "WebRequest") -> Optional[Dict[str, Any]]:
         """处理请求，返回响应
 
         调用 callback 函数并返回其结果。支持同步和异步 callback。
@@ -163,7 +175,9 @@ class ProxyRule(object):
             return {"type": EnumProxyType.Continue}
         return result
 
-    async def handle_response(self, response):
+    async def handle_response(
+        self, response: "WebResponse"
+    ) -> Optional[Dict[str, Any]]:
         """处理响应
 
         调用 callback 函数处理响应。支持同步和异步 callback。
@@ -194,13 +208,13 @@ class ProxyRule(object):
 
         return result
 
-    def get_interception_pattern(self):
+    def get_interception_pattern(self) -> Dict[str, Any]:
         """获取用于 CDP Network.setRequestInterception 的模式
 
         Returns:
             dict: CDP 拦截模式
         """
-        pattern = {"urlPattern": self._url_pattern}
+        pattern: Dict[str, Any] = {"urlPattern": self._url_pattern}
         if self._resource_type:
             pattern["resourceType"] = self._resource_type
         if self._stage != EnumProxyStage.Request:
@@ -215,7 +229,9 @@ class WebRequest:
     用于在代理处理中传递请求信息。
     """
 
-    def __init__(self, url, method, headers, body):
+    def __init__(
+        self, url: str, method: str, headers: Dict[str, str], body: Optional[bytes]
+    ) -> None:
         """初始化 WebRequest
 
         Args:
@@ -224,13 +240,13 @@ class WebRequest:
             headers (dict): 请求头字典
             body (bytes): 请求体内容
         """
-        self._url = url
-        self._method = method
-        self._headers = headers
-        self._body = body
+        self._url: str = url
+        self._method: str = method
+        self._headers: Dict[str, str] = headers
+        self._body: bytes | None = body
 
     @staticmethod
-    def from_request(request):
+    def from_request(request: pyppeteer.network_manager.Request) -> "WebRequest":
         """从 pyppeteer 的 Request 对象创建 WebRequest 对象
 
         Args:
@@ -240,16 +256,16 @@ class WebRequest:
             WebRequest: 新创建的 WebRequest 对象
         """
         # 获取请求 URL
-        url = request.url
+        url: str = request.url
 
         # 获取请求方法
-        method = request.method if request.method else "GET"
+        method: str = request.method if request.method else "GET"
 
         # 获取请求头
-        headers = dict(request.headers) if request.headers else {}
+        headers: Dict[str, str] = dict(request.headers) if request.headers else {}
 
         # 获取请求体（POST 数据）
-        body = None
+        body: Optional[bytes] = None
         if request.postData:
             if isinstance(request.postData, bytes):
                 body = request.postData
@@ -259,27 +275,27 @@ class WebRequest:
         return WebRequest(url=url, method=method, headers=headers, body=body)
 
     @property
-    def url(self):
+    def url(self) -> str:
         """获取请求URL"""
         return self._url
 
     @property
-    def method(self):
+    def method(self) -> str:
         """获取HTTP请求方法"""
         return self._method
 
     @property
-    def headers(self):
+    def headers(self) -> Dict[str, str]:
         """获取请求头字典"""
         return self._headers
 
     @property
-    def body(self):
+    def body(self) -> Optional[bytes]:
         """获取请求体内容"""
         return self._body
 
     @property
-    def content(self):
+    def content(self) -> str:
         if self._body:
             return self._body.decode("utf-8")
         return ""
@@ -288,7 +304,9 @@ class WebRequest:
 class WebResponse:
     """Web请求响应类"""
 
-    def __init__(self, request, status, headers, body):
+    def __init__(
+        self, request: WebRequest, status: int, headers: Dict[str, str], body: bytes
+    ) -> None:
         """初始化
 
         Args:
@@ -297,23 +315,23 @@ class WebResponse:
             headers (dict): 响应头字典
             body (bytes): 响应体内容
         """
-        self._request = request
-        self._status = status
-        self._headers = {k.lower(): v for k, v in headers.items()}
-        self._body = body
+        self._request: WebRequest = request
+        self._status: int = status
+        self._headers: Dict[str, str] = {k.lower(): v for k, v in headers.items()}
+        self._body: bytes = body
 
     @property
-    def url(self):
+    def url(self) -> str:
         """获取响应对应的URL"""
         return self._request.url
 
     @property
-    def status(self):
+    def status(self) -> int:
         """HTTP状态码"""
         return self._status
 
     @property
-    def ok(self):
+    def ok(self) -> bool:
         """判断响应是否成功
 
         Returns:
@@ -322,12 +340,7 @@ class WebResponse:
         return self._status == 0 or 200 <= self._status <= 299
 
     @property
-    def status(self):
-        """获取HTTP状态码"""
-        return self._status
-
-    @property
-    def headers(self):
+    def headers(self) -> Dict[str, str]:
         """获取响应头字典
 
         所有header名称都是小写的。
@@ -335,17 +348,17 @@ class WebResponse:
         return self._headers
 
     @property
-    def body(self):
+    def body(self) -> bytes:
         return self._body
 
     @property
-    def content(self):
+    def content(self) -> str:
         if self._body:
             return self._body.decode("utf-8")
         return ""
 
     @property
-    def request(self):
+    def request(self) -> WebRequest:
         """获取关联的 Request 对象"""
         return self._request
 
@@ -356,18 +369,18 @@ class WebProxy(object):
     使用代理规则处理网络请求拦截和响应
     """
 
-    def __init__(self, page, proxy_rules):
+    def __init__(self, page: pyppeteer.page.Page, proxy_rules: List[ProxyRule]) -> None:
         """初始化 Web 代理
 
         Args:
             page: pyppeteer.page.Page 实例
             proxy_rules: ProxyRule 对象列表
         """
-        self._page = page
-        self._client = page._client
-        self._proxy_rules = proxy_rules
+        self._page: pyppeteer.page.Page = page
+        self._client: Any = page._client
+        self._proxy_rules: List[ProxyRule] = proxy_rules
 
-    async def setup_interception(self):
+    async def setup_interception(self) -> None:
         """启用网络请求拦截
 
         使用 CDP API 直接拦截网络请求，不依赖 pyppeteer 的内部实现。
@@ -378,9 +391,10 @@ class WebProxy(object):
         logging.info("[%s] Setup interception" % self.__class__.__name__)
         self._page._networkManager._userRequestInterceptionEnabled = True
         self._page._networkManager._protocolRequestInterceptionEnabled = True
-        patterns = []
+        patterns: List[Dict[str, Any]] = []
         for rule in self._proxy_rules:
-            patterns.append(rule.get_interception_pattern())
+            if rule.stage == EnumProxyStage.Request:
+                patterns.append(rule.get_interception_pattern())
 
         await asyncio.gather(
             self._client.send(
@@ -391,23 +405,13 @@ class WebProxy(object):
                 "Network.setRequestInterception",
                 {"patterns": patterns},
             ),
-            # 启用 Fetch domain 以支持 Response 阶段的拦截
-            # self._client.send(
-            #     'Fetch.enable',
-            #     {
-            #         'patterns': patterns
-            #     }
-            # )
         )
 
         self._page.on(
             "request", lambda req: asyncio.ensure_future(self.handle_request(req))
         )
-        # self._page.on('response', lambda res: asyncio.ensure_future(
-        #     self.handle_response(res)
-        # ))
 
-    async def get_http_response(self, request):
+    async def get_http_response(self, request: WebRequest) -> Optional[WebResponse]:
         """通过aiohttp获取http返回包，返回WebResponse对象
 
         Args:
@@ -421,40 +425,38 @@ class WebProxy(object):
         url = request.url
 
         # 获取请求头并转换为字典
-        headers = {}
+        headers: Dict[str, str] = {}
         for key, value in request.headers.items():
             headers[key] = value
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    allow_redirects=True,
-                ) as response:
-                    # 获取响应头
-                    response_headers = {}
-                    for key, value in response.headers.items():
-                        response_headers[key] = value
+            # 使用 utils.fetch 替代 aiohttp 直接调用
+            result = await utils.fetch(
+                url=url,
+                method=request.method,
+                headers=headers,
+                respond_with_headers=True,
+            )
+            status, response_headers, body = cast(
+                Tuple[int, Dict[str, str], bytes], result
+            )
 
-                    # 读取响应体
-                    body = await response.read()
-
-                    # 返回 WebResponse 对象
-                    return WebResponse(
-                        request=request,
-                        status=response.status,
-                        headers=response_headers,
-                        body=body,
-                    )
+            # 返回 WebResponse 对象
+            return WebResponse(
+                request=request,
+                status=status,
+                headers=response_headers,
+                body=body,
+            )
         except Exception as ex:
             logging.warning(
                 "[WebProxy] Get HTTP response failed for %s: %s" % (url, str(ex))
             )
             return None
 
-    def get_rule(self, request):
+    def get_rule(
+        self, request: pyppeteer.network_manager.Request
+    ) -> Tuple[Optional[ProxyRule], Optional[ProxyRule]]:
         """获取与request匹配的规则
 
         Args:
@@ -463,8 +465,8 @@ class WebProxy(object):
         Returns:
             tuple: (request_rule, response_rule)
         """
-        request_rule = None
-        response_rule = None
+        request_rule: Optional[ProxyRule] = None
+        response_rule: Optional[ProxyRule] = None
 
         # 遍历所有规则，查找匹配的规则
         for rule in self._proxy_rules:
@@ -476,7 +478,7 @@ class WebProxy(object):
 
         return request_rule, response_rule
 
-    async def handle_request(self, request):
+    async def handle_request(self, request: pyppeteer.network_manager.Request) -> None:
         """处理请求
 
         遍历所有代理规则，找到第一个匹配的规则并调用其 handle 方法
@@ -516,7 +518,7 @@ class WebProxy(object):
                 )
                 await request.continue_()
                 return
-            proxy_type = result.pop("type", 0)
+            proxy_type: int = result.pop("type", 0)
             if proxy_type == EnumProxyType.Mock:
                 await request.respond(result)
                 return
@@ -545,13 +547,13 @@ class WebProxy(object):
         )
         await request.continue_()
 
-    def get_interception_patterns(self):
+    def get_interception_patterns(self) -> List[Dict[str, Any]]:
         """获取所有规则的拦截模式
 
         Returns:
             list: CDP 拦截模式列表
         """
-        patterns = []
-        for rule in self._rules:
+        patterns: List[Dict[str, Any]] = []
+        for rule in self._proxy_rules:
             patterns.append(rule.get_interception_pattern())
         return patterns

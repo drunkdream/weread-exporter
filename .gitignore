@@ -2,9 +2,23 @@ build/
 cache/
 dist/
 output/
-*.pyc
 *.epub
 *.pdf
 *.md
 *.log
 *.egg-info/
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+.Python
+.env
+.venv
+env/
+venv/
+ENV/

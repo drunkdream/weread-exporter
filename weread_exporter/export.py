@@ -1,9 +1,13 @@
+from weread_exporter.webpage import WeReadWebPage
+
+
 import asyncio
 import json
 import logging
 import os
 import sys
 import time
+from typing import Dict, List, Optional, Any
 
 import bs4
 import markdown
@@ -13,32 +17,40 @@ from weasyprint import HTML, CSS
 
 from . import utils
 
+if sys.version_info >= (3, 8):
+    from typing import TYPE_CHECKING
+else:
+    from typing_extensions import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .webpage import WeReadWebPage
+
 current_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class WeReadExporter(object):
-    def __init__(self, page, save_dir):
-        self._page = page
-        self._save_dir = save_dir
+    def __init__(self, page: WeReadWebPage, save_dir: str) -> None:
+        self._page: WeReadWebPage = page
+        self._save_dir: str = save_dir
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
-        self._meta_path = os.path.join(self._save_dir, "meta.json")
-        self._chapter_dir = os.path.join(self._save_dir, "chapters")
-        self._image_dir = os.path.join(self._save_dir, "images")
+        self._meta_path: str = os.path.join(self._save_dir, "meta.json")
+        self._chapter_dir: str = os.path.join(self._save_dir, "chapters")
+        self._image_dir: str = os.path.join(self._save_dir, "images")
         if not os.path.isdir(self._image_dir):
             os.mkdir(self._image_dir)
-        self._cover_image_path = os.path.join(self._save_dir, "cover.jpg")
-        self._meta_data = {}
-        self._current_chapter = 0
+        self._cover_image_path: str = os.path.join(self._save_dir, "cover.jpg")
+        self._meta_data: Dict[str, Any] = {}
+        self._current_chapter: int = 0
 
-    async def get_book_title(self):
+    async def get_book_title(self) -> str:
         meta_data = await self._load_meta_data()
         return meta_data["title"]
 
-    def _make_chapter_path(self, index, chapter_id):
+    def _make_chapter_path(self, index: int, chapter_id: str) -> str:
         return os.path.join(self._chapter_dir, "%d-%s.md" % (index + 1, chapter_id))
 
-    async def _load_meta_data(self):
+    async def _load_meta_data(self) -> Dict[str, Any]:
         if self._meta_data:
             return self._meta_data
 
@@ -53,7 +65,7 @@ class WeReadExporter(object):
                     self._meta_data = json.loads(text)
         return self._meta_data
 
-    async def merge_markdown(self, save_path):
+    async def merge_markdown(self, save_path: str) -> None:
         meta_data = await self._load_meta_data()
         with open(save_path, "w") as fp:
             for index, chapter in enumerate(meta_data["chapters"]):
@@ -63,8 +75,8 @@ class WeReadExporter(object):
                 with open(file_path) as fd:
                     fp.write(fd.read() + "\n")
 
-    async def pre_process_markdown(self):
-        meta_data = await self._load_meta_data()
+    async def pre_process_markdown(self) -> None:
+        meta_data: Dict[str, Any] = await self._load_meta_data()
         for index, chapter in enumerate(meta_data["chapters"]):
             chapter_path = self._make_chapter_path(index, chapter["id"])
             if not os.path.isfile(chapter_path):
@@ -100,7 +112,7 @@ class WeReadExporter(object):
                 pos = output.find("](https://", pos)
                 if pos < 0:
                     break
-                pos1 = output.find(")", pos)
+                pos1: int = output.find(")", pos)
                 url = output[pos + 2 : pos1]
                 logging.info("[%s] Replace image %s" % (self.__class__.__name__, url))
                 try:
@@ -121,7 +133,7 @@ class WeReadExporter(object):
             with open(chapter_path, "wb") as fp:
                 fp.write(output.encode())
 
-    async def markdown_to_txt(self, save_path):
+    async def markdown_to_txt(self, save_path: str) -> None:
         meta_data = await self._load_meta_data()
         for index, chapter in enumerate(meta_data["chapters"]):
             chapter_path = self._make_chapter_path(index, chapter["id"])
@@ -130,7 +142,7 @@ class WeReadExporter(object):
             with open(save_path, "a+") as fp:
                 fp.write(soup.text + "\n\n")
 
-    def _markdown_to_html(self, path_or_text, wrap=True):
+    def _markdown_to_html(self, path_or_text: str, wrap: bool = True) -> str:
         if os.path.isfile(path_or_text):
             with open(path_or_text, "rb") as fp:
                 markdown_text = fp.read().decode()
@@ -152,12 +164,16 @@ class WeReadExporter(object):
         return html
 
     async def markdown_to_pdf(
-        self, save_path, extra_css=None, image_format="jpg", dump_html=False
-    ):
+        self,
+        save_path: str,
+        extra_css: Optional[str] = None,
+        image_format: str = "jpg",
+        dump_html: bool = False,
+    ) -> None:
         meta_data = await self._load_meta_data()
-        raw_html = '<img src="cover.jpg" style="width: 100%;">\n'
+        raw_html: str = '<img src="cover.jpg" style="width: 100%;">\n'
         for index, chapter in enumerate(meta_data["chapters"]):
-            chapter_path = self._make_chapter_path(index, chapter["id"])
+            chapter_path: str = self._make_chapter_path(index, chapter["id"])
             raw_html += self._markdown_to_html(chapter_path, wrap=False)
         raw_html = raw_html.replace(
             "<pre><code>", "<pre><code>\n"
@@ -165,9 +181,9 @@ class WeReadExporter(object):
         if image_format == "png":
             soup = bs4.BeautifulSoup(raw_html, features="html.parser")
             for img in soup.find_all("img"):
-                src = os.path.join(self._save_dir, img.attrs["src"])
+                src: str = os.path.join(self._save_dir, img.attrs["src"])
                 if not src.endswith(".png"):
-                    png_path = src[:-3] + "png"
+                    png_path: str = src[:-3] + "png"
                     utils.save_to_png(src, png_path)
                     img.attrs["src"] = img.attrs["src"][:-3] + "png"
 
@@ -176,9 +192,9 @@ class WeReadExporter(object):
         if dump_html:
             html_path = os.path.join(self._save_dir, "output.html")
             with open(html_path, "w") as fp:
-                fp.write(raw_html)
+                fp.write(raw_html)  # pyright: ignore[reportUnusedCallResult]
         html = HTML(string=raw_html, base_url=self._save_dir)
-        css = []
+        css: List[CSS] = []
         css_path = os.path.join(current_path, "style.css")
         with open(css_path) as fp:
             raw_css = fp.read()
@@ -187,9 +203,13 @@ class WeReadExporter(object):
             css.append(CSS(string=raw_css))
 
         # Generate PDF
-        html.write_pdf(save_path, stylesheets=css)
+        html.write_pdf(
+            save_path, stylesheets=css
+        )  # pyright: ignore[reportUnknownMemberType, reportUnusedCallResult]
 
-    async def markdown_to_epub(self, save_path, extra_css=None):
+    async def markdown_to_epub(
+        self, save_path: str, extra_css: Optional[str] = None
+    ) -> None:
         meta_data = await self._load_meta_data()
         book = epub.EpubBook()
         book.set_identifier("id123456")
@@ -217,7 +237,7 @@ class WeReadExporter(object):
         book.add_item(default_css)
         chapters = []
         toc = []
-        section = None
+        section: Optional[tuple] = None
         for index, chapter in enumerate(meta_data["chapters"]):
             chapter_path = self._make_chapter_path(index, chapter["id"])
             xhtml_name = "chap_%.4d.xhtml" % (index + 1)
@@ -283,7 +303,7 @@ class WeReadExporter(object):
         # write to the file
         epub.write_epub(save_path, book, {})
 
-    async def epub_to_mobi(self, epub_path, save_path):
+    async def epub_to_mobi(self, epub_path: str, save_path: str) -> None:
         kindlegen_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "bin", sys.platform, "kindlegen"
         )
@@ -302,14 +322,14 @@ class WeReadExporter(object):
         )
         await proc.wait()
 
-    async def save_cover_image(self):
+    async def save_cover_image(self) -> None:
         meta_data = await self._load_meta_data()
         cover_url = meta_data["cover"].replace("/s_", "/t9_")
         data = await utils.fetch(cover_url)
         with open(self._cover_image_path, "wb") as fp:
             fp.write(data)
 
-    async def export_markdown(self, timeout=60, interval=30):
+    async def export_markdown(self, timeout: int = 60, interval: int = 30) -> None:
         if not os.path.isdir(self._chapter_dir):
             os.makedirs(self._chapter_dir)
         meta_data = await self._load_meta_data()
@@ -364,12 +384,12 @@ class WeReadExporter(object):
                     "Load chapter %s failed" % chapter["title"]
                 )
 
-            markdown = await self._page.get_markdown()
+            markdown_content = await self._page.get_markdown()
             logging.info(
                 "[%s] Export chapter %s to %s"
                 % (self.__class__.__name__, chapter["title"], file_path)
             )
             with open(file_path, "wb") as fp:
-                fp.write(markdown.encode("utf-8", errors="replace"))
+                fp.write(markdown_content.encode("utf-8", errors="replace"))
 
             await asyncio.sleep(interval)

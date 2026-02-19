@@ -3,19 +3,35 @@ import asyncio
 import logging
 import os
 import sys
+from typing import Callable, Optional, List
+
+if sys.version_info >= (3, 8):
+    from typing import TYPE_CHECKING
+else:
+    from typing_extensions import TYPE_CHECKING
+
+from . import utils, webpage
 
 
-def patch_windows():
-    bin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "bin", "win32")
+def patch_windows() -> None:
+    bin_path: str = os.path.join(
+        os.path.abspath(os.path.dirname(__file__)), "bin", "win32"
+    )
     os.environ["PATH"] += ";" + bin_path
     if hasattr(os, "add_dll_directory"):
-        os.add_dll_directory(bin_path)
+        os.add_dll_directory(bin_path)  # pyright: ignore[reportUnusedCallResult]
 
 
-def patch_generateRequestHash():
+def patch_macos() -> None:
+    fallback_lib_path: str = os.environ.get("DYLD_FALLBACK_LIBRARY_PATH", "")
+    if not fallback_lib_path:
+        os.environ["DYLD_FALLBACK_LIBRARY_PATH"] += "/opt/homebrew/lib"
+
+
+def patch_generateRequestHash() -> None:
     from pyppeteer import network_manager
 
-    orig_generateRequestHash = network_manager.generateRequestHash
+    orig_generateRequestHash: Callable[..., str] = network_manager.generateRequestHash
 
     def patched_generateRequestHash(request):
         request["headers"].pop("Origin", None)
@@ -24,75 +40,79 @@ def patch_generateRequestHash():
     network_manager.generateRequestHash = patched_generateRequestHash
 
 
-async def async_main():
-    from . import export, utils, webpage
+async def async_main() -> int:
+    from . import export
 
     parser = argparse.ArgumentParser(
         prog="weread-exporter", description="WeRead book export cmdline tool"
     )
-    parser.add_argument("-b", "--book-id", help="book id", required=True)
     parser.add_argument(
+        "-b", "--book-id", help="book id", required=True
+    )  # pyright: ignore[reportUnusedCallResult]
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "-o",
         "--output-format",
         help="output file format",
         action="append",
         choices=["md", "epub", "pdf", "mobi", "txt"],
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--load-timeout",
         help="load chapter page timeout",
         type=int,
         default=60,
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--load-interval",
         help="load chapter page interval time",
         type=int,
         default=30,
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--css-file",
         help="overide default css style",
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--headless", help="chrome headless", action="store_true", default=False
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--force-login", help="force login first", action="store_true", default=False
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--use-default-profile",
         help="use default profile",
         action="store_true",
         default=False,
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--mock-user-agent",
         help="use mock user-agent",
         action="store_true",
         default=False,
     )
-    parser.add_argument(
+    parser.add_argument(  # pyright: ignore[reportUnusedCallResult]
         "--proxy-server",
         help="http proxy server, e.g. http://127.0.0.1:8888",
     )
     args = parser.parse_args()
-    args.output_format = args.output_format or ["epub"]
+    args.output_format = args.output_format or ["epub"]  # pyright: ignore[reportAny]
     if "mobi" in args.output_format and "epub" not in args.output_format:
-        args.output_format.append("epub")
+        args.output_format.append("epub")  # pyright: ignore[reportUnusedCallResult]
 
-    extra_css = None
-    if args.css_file:
-        if not os.path.isfile(args.css_file):
-            raise RuntimeError("CSS file %s not exist" % args.css_file)
-        with open(args.css_file) as fp:
+    extra_css: Optional[str] = None
+    if args.css_file:  # pyright: ignore[reportAny]
+        if not os.path.isfile(args.css_file):  # pyright: ignore[reportAny]
+            raise RuntimeError(
+                "CSS file %s not exist" % args.css_file
+            )  # pyright: ignore[reportAny]
+        with open(args.css_file) as fp:  # pyright: ignore[reportAny]
             extra_css = fp.read()
 
-    if "_" in args.book_id:
+    if "_" in args.book_id:  # pyright: ignore[reportAny]
         # book list id
         book_list = [it["id"] for it in await utils.get_book_list(args.book_id)]
     else:
-        book_list = [args.book_id]
+        book_list = [args.book_id]  # pyright: ignore[reportAny]
 
     for book_id in book_list:
         logging.info("Exporting book %s" % book_id)
@@ -112,11 +132,11 @@ async def async_main():
         while True:
             try:
                 await page.launch(
-                    headless=args.headless,
-                    force_login=args.force_login,
-                    use_default_profile=args.use_default_profile,
-                    mock_user_agent=args.mock_user_agent,
-                    proxy_server=args.proxy_server,
+                    headless=args.headless,  # pyright: ignore[reportAny]
+                    force_login=args.force_login,  # pyright: ignore[reportAny]
+                    use_default_profile=args.use_default_profile,  # pyright: ignore[reportAny]
+                    mock_user_agent=args.mock_user_agent,  # pyright: ignore[reportAny]
+                    proxy_server=args.proxy_server,  # pyright: ignore[reportAny]
                 )
             except RuntimeError:
                 logging.exception("Launch book %s home page failed" % book_id)
@@ -183,10 +203,13 @@ async def async_main():
     return 0
 
 
-def main():
+def main() -> int:
     if sys.platform == "win32":
         patch_windows()
+    elif sys.platform == "darwin":
+        patch_macos()
     patch_generateRequestHash()
+    utils.check_cairo_installed()
     logging.root.level = logging.INFO
     handler = logging.StreamHandler()
     fmt = "[%(asctime)s][%(levelname)s]%(message)s"
@@ -196,13 +219,13 @@ def main():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        loop.run_until_complete(async_main())
+        return loop.run_until_complete(async_main())
     except:
         import traceback
 
         traceback.print_exc()
-        return
+        return -1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

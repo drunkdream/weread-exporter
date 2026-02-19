@@ -1,4 +1,5 @@
 """
+WeRead Exporter - Export weread books to various formats
 """
 
-VERSION = "0.1.0"
+VERSION: str = "0.1.0"
