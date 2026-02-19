@@ -3,21 +3,20 @@ Web Proxy
 """
 
 import asyncio
-import json
 import logging
 import re
 import sys
 import traceback
-from typing import Dict, List, Optional, Tuple, Union, Any, Callable, Awaitable, cast
+from typing import Dict, List, Optional, Tuple, Union, Any, Callable, Awaitable, cast  # pyright: ignore[reportDeprecated]
 
 import pyppeteer
 
 from . import utils
 
 if sys.version_info >= (3, 8):
-    from typing import Literal
+    from typing import TYPE_CHECKING
 else:
-    from typing_extensions import Literal
+    from typing_extensions import TYPE_CHECKING
 
 
 class EnumResourceType(object):
@@ -69,12 +68,12 @@ class ProxyRule(object):
         self,
         url_pattern: str,
         callback: Callable[
-            [Union["WebRequest", "WebResponse"]],
-            Union[Dict[str, Any], Awaitable[Dict[str, Any]], None],
+            [Union["WebRequest", "WebResponse"]],  # pyright: ignore[reportDeprecated]
+            Union[Dict[str, Any], Awaitable[Dict[str, Any]], None],  # pyright: ignore[reportDeprecated]
         ],
-        resource_type: Optional[str] = None,
-        stage: Optional[str] = None,
-        methods: Optional[List[str]] = None,
+        resource_type: Optional[str] = None,  # pyright: ignore[reportDeprecated]
+        stage: Optional[str] = None,  # pyright: ignore[reportDeprecated]
+        methods: Optional[List[str]] = None,  # pyright: ignore[reportDeprecated]
     ) -> None:
         """初始化代理规则
 
@@ -96,7 +95,7 @@ class ProxyRule(object):
         """拦截阶段"""
         return self._stage
 
-    def matches(self, request: pyppeteer.network_manager.Request) -> bool:
+    def matches(self, request: Any) -> bool:  # pyright: ignore[reportUnknownParameterType]
         """检查请求是否匹配此规则
 
         Args:
@@ -139,7 +138,7 @@ class ProxyRule(object):
 
         return re.match(pattern, url) is not None
 
-    async def handle_request(self, request: "WebRequest") -> Optional[Dict[str, Any]]:
+    async def handle_request(self, request: "WebRequest") -> Optional[Dict[str, Any]]:  # pyright: ignore[reportDeprecated]
         """处理请求，返回响应
 
         调用 callback 函数并返回其结果。支持同步和异步 callback。
@@ -177,7 +176,7 @@ class ProxyRule(object):
 
     async def handle_response(
         self, response: "WebResponse"
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Dict[str, Any]]:  # pyright: ignore[reportDeprecated]
         """处理响应
 
         调用 callback 函数处理响应。支持同步和异步 callback。
@@ -208,13 +207,13 @@ class ProxyRule(object):
 
         return result
 
-    def get_interception_pattern(self) -> Dict[str, Any]:
+    def get_interception_pattern(self) -> Dict[str, Any]:  # pyright: ignore[reportDeprecated]
         """获取用于 CDP Network.setRequestInterception 的模式
 
         Returns:
             dict: CDP 拦截模式
         """
-        pattern: Dict[str, Any] = {"urlPattern": self._url_pattern}
+        pattern: Dict[str, Any] = {"urlPattern": self._url_pattern}  # pyright: ignore[reportDeprecated]
         if self._resource_type:
             pattern["resourceType"] = self._resource_type
         if self._stage != EnumProxyStage.Request:
@@ -230,7 +229,7 @@ class WebRequest:
     """
 
     def __init__(
-        self, url: str, method: str, headers: Dict[str, str], body: Optional[bytes]
+        self, url: str, method: str, headers: Dict[str, str], body: Optional[bytes]  # pyright: ignore[reportDeprecated]
     ) -> None:
         """初始化 WebRequest
 
@@ -242,11 +241,11 @@ class WebRequest:
         """
         self._url: str = url
         self._method: str = method
-        self._headers: Dict[str, str] = headers
+        self._headers: Dict[str, str] = headers  # pyright: ignore[reportDeprecated]
         self._body: bytes | None = body
 
     @staticmethod
-    def from_request(request: pyppeteer.network_manager.Request) -> "WebRequest":
+    def from_request(request: Any) -> "WebRequest":  # pyright: ignore[reportUnknownParameterType]
         """从 pyppeteer 的 Request 对象创建 WebRequest 对象
 
         Args:
@@ -262,10 +261,10 @@ class WebRequest:
         method: str = request.method if request.method else "GET"
 
         # 获取请求头
-        headers: Dict[str, str] = dict(request.headers) if request.headers else {}
+        headers: Dict[str, str] = dict(request.headers) if request.headers else {}  # pyright: ignore[reportDeprecated]
 
         # 获取请求体（POST 数据）
-        body: Optional[bytes] = None
+        body: Optional[bytes] = None  # pyright: ignore[reportDeprecated]
         if request.postData:
             if isinstance(request.postData, bytes):
                 body = request.postData
@@ -285,12 +284,12 @@ class WebRequest:
         return self._method
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> Dict[str, str]:  # pyright: ignore[reportDeprecated]
         """获取请求头字典"""
         return self._headers
 
     @property
-    def body(self) -> Optional[bytes]:
+    def body(self) -> Optional[bytes]:  # pyright: ignore[reportDeprecated]
         """获取请求体内容"""
         return self._body
 
@@ -305,7 +304,7 @@ class WebResponse:
     """Web请求响应类"""
 
     def __init__(
-        self, request: WebRequest, status: int, headers: Dict[str, str], body: bytes
+        self, request: WebRequest, status: int, headers: Dict[str, str], body: bytes  # pyright: ignore[reportDeprecated]
     ) -> None:
         """初始化
 
@@ -317,7 +316,7 @@ class WebResponse:
         """
         self._request: WebRequest = request
         self._status: int = status
-        self._headers: Dict[str, str] = {k.lower(): v for k, v in headers.items()}
+        self._headers: Dict[str, str] = {k.lower(): v for k, v in headers.items()}  # pyright: ignore[reportDeprecated]
         self._body: bytes = body
 
     @property
@@ -340,7 +339,7 @@ class WebResponse:
         return self._status == 0 or 200 <= self._status <= 299
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> Dict[str, str]:  # pyright: ignore[reportDeprecated]
         """获取响应头字典
 
         所有header名称都是小写的。
@@ -369,7 +368,7 @@ class WebProxy(object):
     使用代理规则处理网络请求拦截和响应
     """
 
-    def __init__(self, page: pyppeteer.page.Page, proxy_rules: List[ProxyRule]) -> None:
+    def __init__(self, page: pyppeteer.page.Page, proxy_rules: List[ProxyRule]) -> None:  # pyright: ignore[reportDeprecated]
         """初始化 Web 代理
 
         Args:
@@ -378,7 +377,7 @@ class WebProxy(object):
         """
         self._page: pyppeteer.page.Page = page
         self._client: Any = page._client
-        self._proxy_rules: List[ProxyRule] = proxy_rules
+        self._proxy_rules: List[ProxyRule] = proxy_rules  # pyright: ignore[reportDeprecated]
 
     async def setup_interception(self) -> None:
         """启用网络请求拦截
@@ -391,7 +390,7 @@ class WebProxy(object):
         logging.info("[%s] Setup interception" % self.__class__.__name__)
         self._page._networkManager._userRequestInterceptionEnabled = True
         self._page._networkManager._protocolRequestInterceptionEnabled = True
-        patterns: List[Dict[str, Any]] = []
+        patterns: List[Dict[str, Any]] = []  # pyright: ignore[reportDeprecated]
         for rule in self._proxy_rules:
             if rule.stage == EnumProxyStage.Request:
                 patterns.append(rule.get_interception_pattern())
@@ -411,7 +410,7 @@ class WebProxy(object):
             "request", lambda req: asyncio.ensure_future(self.handle_request(req))
         )
 
-    async def get_http_response(self, request: WebRequest) -> Optional[WebResponse]:
+    async def get_http_response(self, request: WebRequest) -> Optional[WebResponse]:  # pyright: ignore[reportDeprecated]
         """通过aiohttp获取http返回包，返回WebResponse对象
 
         Args:
@@ -425,7 +424,7 @@ class WebProxy(object):
         url = request.url
 
         # 获取请求头并转换为字典
-        headers: Dict[str, str] = {}
+        headers: Dict[str, str] = {}  # pyright: ignore[reportDeprecated]
         for key, value in request.headers.items():
             headers[key] = value
 
@@ -438,7 +437,7 @@ class WebProxy(object):
                 respond_with_headers=True,
             )
             status, response_headers, body = cast(
-                Tuple[int, Dict[str, str], bytes], result
+                Tuple[int, Dict[str, str], bytes], result  # pyright: ignore[reportDeprecated]
             )
 
             # 返回 WebResponse 对象
@@ -455,8 +454,8 @@ class WebProxy(object):
             return None
 
     def get_rule(
-        self, request: pyppeteer.network_manager.Request
-    ) -> Tuple[Optional[ProxyRule], Optional[ProxyRule]]:
+        self, request: Any  # pyright: ignore[reportAny]
+    ) -> Tuple[Optional[ProxyRule], Optional[ProxyRule]]:  # pyright: ignore[reportDeprecated]
         """获取与request匹配的规则
 
         Args:
@@ -465,8 +464,8 @@ class WebProxy(object):
         Returns:
             tuple: (request_rule, response_rule)
         """
-        request_rule: Optional[ProxyRule] = None
-        response_rule: Optional[ProxyRule] = None
+        request_rule: Optional[ProxyRule] = None  # pyright: ignore[reportDeprecated]
+        response_rule: Optional[ProxyRule] = None  # pyright: ignore[reportDeprecated]
 
         # 遍历所有规则，查找匹配的规则
         for rule in self._proxy_rules:
@@ -478,7 +477,7 @@ class WebProxy(object):
 
         return request_rule, response_rule
 
-    async def handle_request(self, request: pyppeteer.network_manager.Request) -> None:
+    async def handle_request(self, request: Any) -> None:  # pyright: ignore[reportAny]
         """处理请求
 
         遍历所有代理规则，找到第一个匹配的规则并调用其 handle 方法
@@ -486,7 +485,7 @@ class WebProxy(object):
         Args:
             request: pyppeteer 的 Request 对象
         """
-        if request._interceptionHandled:
+        if request._interceptionHandled:  # pyright: ignore[reportAny]
             logging.warning(
                 "[%s] Ignore handled request %s %s %s"
                 % (
