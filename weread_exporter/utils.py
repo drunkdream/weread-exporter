@@ -14,15 +14,15 @@ else:
     from typing_extensions import Literal
 
 
+class BreakExportingError(RuntimeError):
+    pass
+
+
+class CairoNotInstalledError(Exception):
+    pass
+
+
 class ChromeNotInstalledError(Exception):
-    pass
-
-
-class LoginRequiredError(RuntimeError):
-    pass
-
-
-class LoadChapterFailedError(RuntimeError):
     pass
 
 
@@ -30,7 +30,11 @@ class InvalidUserError(RuntimeError):
     pass
 
 
-class CairoNotInstalledError(Exception):
+class LoadChapterFailedError(RuntimeError):
+    pass
+
+
+class LoginRequiredError(RuntimeError):
     pass
 
 

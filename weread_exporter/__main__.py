@@ -138,6 +138,9 @@ async def async_main() -> int:
                     mock_user_agent=args.mock_user_agent,  # pyright: ignore[reportAny]
                     proxy_server=args.proxy_server,  # pyright: ignore[reportAny]
                 )
+            except utils.BreakExportingError:
+                logging.info("Exit process...")
+                return -1
             except RuntimeError:
                 logging.exception("Launch book %s home page failed" % book_id)
                 await asyncio.sleep(2)

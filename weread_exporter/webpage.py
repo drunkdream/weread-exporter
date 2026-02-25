@@ -26,6 +26,17 @@ else:
     from typing_extensions import TYPE_CHECKING
 
 
+DETECT_HEADLESS_SCRIPT = """
+const webdriver = navigator.webdriver === true;
+const chromeObj = typeof window.chrome !== "undefined";
+const pluginCount = navigator.plugins.length;
+const languageCount = navigator.languages ? navigator.languages.length : 0;
+const headlessUA = /HeadlessChrome/.test(navigator.userAgent);
+const zeroOuterSize = (window.outerWidth === 0 && window.outerHeight === 0);
+webdriver || !chromeObj || pluginCount === 0 || languageCount === 0  || headlessUA || zeroOuterSize;
+"""
+
+
 class WeReadWebPage(object):
     """WebRead WebPage"""
 
@@ -243,7 +254,7 @@ class WeReadWebPage(object):
 
         args = ["--no-first-run", "--remote-allow-origins=*"]
         if headless:
-            args.append("--headless")
+            args.append("--headless=new")
             if sys.platform == "linux" and os.getuid() == 0:
                 args.append("--no-sandbox")
         if use_default_profile:
@@ -273,7 +284,7 @@ class WeReadWebPage(object):
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => {
                         console.log('navigator.webdriver is called');
-                        console.trace();
+                        console.log(new Error().stack);
                         return undefined;
                     }
                 });
@@ -281,7 +292,7 @@ class WeReadWebPage(object):
                 Object.prototype.hasOwnProperty = function (key) {
                     if (key === 'webdriver') {
                         console.log('hasOwnProperty', key, 'is called');
-                        console.trace();
+                        console.log(new Error().stack);
                         return false;
                     }
                     return _hasOwnProperty.call(this, key);
@@ -320,6 +331,12 @@ class WeReadWebPage(object):
                 "deviceScaleFactor": 0.3,
             }
         )
+        detect_headless_result = await self._page.evaluate(DETECT_HEADLESS_SCRIPT)
+        if detect_headless_result:
+            key = input("浏览器检测到Headless模式，继续执行可能导致帐号被封禁，是否继续执行？Y/n\n")
+            if key != "Y":
+                raise utils.BreakExportingError()
+
         if self._cookie.get("wr_vid"):
             try:
                 user_info = await self.get_user_info()
@@ -377,8 +394,10 @@ class WeReadWebPage(object):
             raise ex
 
     def handle_log(self, message: Any) -> None:
+        text = message.text
+        logging.info("[%s][Console] %s" % (self.__class__.__name__, text))
         with open("%s.log" % self._book_id, "a+", encoding="utf-8") as fp:
-            fp.write("[%s] %s\n" % (self._url, message.text))
+            fp.write("[%s] %s\n" % (self._url, text))
 
     async def wait_for_avatar(self, timeout: int = 30) -> None:
         time0 = time.time()
@@ -530,6 +549,7 @@ class WeReadWebPage(object):
                 "headers": headers,
             }
         elif "chlog" in request.url:
+            logging.info("[%s] Url %s return mock result" % (self.__class__.__name__, request.url))
             return {
                 "type": webproxy.EnumProxyType.Mock,
                 "status": 200,
